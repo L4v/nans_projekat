@@ -26,6 +26,8 @@ typedef size_t memory_index;
 typedef float real32;
 typedef double real64;
 
+#include "sdl_nans.h"
+
 #define Kibibytes(Value) ((Value) * 1024LL)
 #define Mebibytes(Value) (Kibibytes(Value) * 1024LL)
 #define Gibibytes(Value) (Mebibytes(Value) * 1024LL)
@@ -47,24 +49,6 @@ typedef double real64;
 #define local_persist static
 
 global_variable uint64 GlobalPerfCountFrequency;
-
-struct sdl_state
-{
-  glm::vec3 Positions[64];
-  real32 FOV;
-  real32 Pitch;
-  real32 Yaw;
-};
-
-struct memory
-{
-  void* PermanentStorage;
-  uint64 PermanentStorageSize;
-  void* TransientStorage;
-  uint64 TransientStorageSize;
-
-  bool32 IsInitialized;
-};
 
 internal const char*
 LoadShader(const char* Path)
@@ -88,12 +72,6 @@ LoadShader(const char* Path)
     }
   return shaderText;
 }
-
-enum shader_type{
-     Vertex = 0,
-     Fragment
-};
-
   
 internal uint32
 LoadTexture(char* Path)
@@ -181,8 +159,16 @@ SDLWindowResize(int32 Width, int32 Height)
   glViewport(0, 0, Width, Height);
 }
 
-bool32
-SDLHandleEvent(SDL_Event* Event)
+internal void
+SDLProcessSimKeyboardButton(sdl_button_state* NewState, bool32 IsDown)
+{
+  Assert(NewState->EndedDown != IsDown);
+  NewState->EndedDown = IsDown;
+  ++NewState->HalfTransitionCount;
+}
+
+internal bool32
+SDLHandleEvent(SDL_Event* Event, sdl_input* Input) 
 {
   bool32 ShouldQuit = 0;
   switch(Event->type)
@@ -204,6 +190,13 @@ SDLHandleEvent(SDL_Event* Event)
 	    }break;
 	  }
       }break;
+    case SDL_MOUSEMOTION:
+      {
+	Input->MouseController.X = Event->motion.x;
+	Input->MouseController.Y = Event->motion.y;
+	Input->MouseController.XRel = Event->motion.xrel;
+	Input->MouseController.YRel = Event->motion.yrel;
+      }break;
 
       // NOTE(Jovan): Keyboard events
     case SDL_KEYDOWN:
@@ -212,9 +205,38 @@ SDLHandleEvent(SDL_Event* Event)
 	SDL_Keycode KeyCode = Event->key.keysym.sym;
 	bool32 IsDown = (Event->key.state == SDL_PRESSED);
 
+	if(Event->key.state == SDL_RELEASED)
+	  {
+
+	  }
+	else if(Event->key.repeat)
+	  {
+	    
+	  }
+
 	if(!(Event->key.repeat))
 	  {
-	    if(KeyCode == SDLK_ESCAPE)
+	    if(KeyCode == SDLK_w)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.MoveForward, IsDown);
+	      }
+	    else if(KeyCode == SDLK_a)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.MoveLeft, IsDown);
+	      }
+	    else if(KeyCode == SDLK_d)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.MoveRight, IsDown);
+	      }
+	    else if(KeyCode == SDLK_s)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.MoveBack, IsDown);
+	      }
+	    else if(KeyCode == SDLK_SPACE)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.ShootAction, IsDown);
+	      }
+	    else if(KeyCode == SDLK_ESCAPE)
 	      {
 		ShouldQuit = 1;
 	      }
@@ -238,6 +260,24 @@ SDLGetSecondsElapsed(int64 Start, int64 End)
 {
   real32 Result = (real32)(End - Start) / (real32)GlobalPerfCountFrequency;
   return Result;
+}
+
+internal void
+UpdateCamera(sdl_state* State, sdl_input* Input)
+{
+
+  State->Camera.Yaw += Input->MouseController.XRel * Input->MouseController.Sensitivity;
+  State->Camera.Pitch += -Input->MouseController.YRel * Input->MouseController.Sensitivity;
+  Input->MouseController.XRel = 0.0f;
+  Input->MouseController.YRel = 0.0f;
+  if(State->Camera.Pitch > 89.0f)
+    {
+      State->Camera.Pitch = 89.0f;
+    }
+  if(State->Camera.Pitch < -89.0f)
+    {
+      State->Camera.Pitch = -89.0f;
+    }
 }
 
 int main()
@@ -447,63 +487,107 @@ int main()
   // --------------------------------------
 
   glEnable(GL_DEPTH_TEST);
+
+
   
   // NOTE(Jovan): Main loop
   bool32 Running = 1;
   uint64 LastCounter = SDLGetWallClock();
   real32 dt = 0.0f;
-  real32 MouseSensitivity = 0.5f;
+  sdl_input SimInput[2];
+  sdl_input* NewInput = &SimInput[0];
+  sdl_input* OldInput = &SimInput[1];
+  *NewInput = {};
+  *OldInput = {};
+  
   // NOTE(Jovan): Grab mouse
   SDL_SetRelativeMouseMode(SDL_TRUE);
   while(Running)
     {
-
+      
       // TODO(Jovan): Move to sim update / render
       sdl_state* SimState = (sdl_state*)SimMemory.PermanentStorage;
       if(!SimMemory.IsInitialized)
 	{
-	  SimState->FOV = 45.0f; 
-	  SimState->Pitch = 0.0f;
-	  SimState->Yaw = -90.0f;
+	  
+	  // NOTE(Jovan): Camera init
+	  SimState->Camera.FOV = 45.0f; 
+	  SimState->Camera.Pitch = 0.0f;
+	  SimState->Camera.Yaw = -90.0f;
+	  SimState->Camera.X = 0.0f;
+	  SimState->Camera.Y = 0.0f;
+	  SimState->Camera.Z = -3.0f;
+	  
+	  // TODO(Jovan): Remove, only for testing
 	  for(int CubeIndex = 0;
-	      CubeIndex < 3;
+	      CubeIndex < 10;
 	      ++CubeIndex)
 	    {
-	      SimState->Positions[CubeIndex] = glm::vec3(0.2*CubeIndex,
-							 0.3*CubeIndex,
-							 0.4*CubeIndex);
+	      SimState->Positions[CubeIndex] = glm::vec3(0.5*CubeIndex,
+							 1.0*CubeIndex,
+							 1.5*CubeIndex);
 	    }
 	  SimMemory.IsInitialized = 1;
 	}
+
+      sdl_keyboard* OldKeyboardController = &OldInput->KeyboardController;
+      sdl_keyboard* NewKeyboardController = &NewInput->KeyboardController;
+      *NewKeyboardController = {};
+
+      sdl_mouse* OldMouseController = &OldInput->MouseController;
+      sdl_mouse* NewMouseController = &NewInput->MouseController;
+      *NewMouseController = {};
+      NewMouseController->Sensitivity = 0.5f;
+
+      for(uint32 ButtonIndex = 0;
+	  ButtonIndex < ArrayCount(NewKeyboardController->Buttons);
+	  ++ButtonIndex)
+	{
+	  NewKeyboardController->Buttons[ButtonIndex].EndedDown =
+	    OldKeyboardController->Buttons[ButtonIndex].EndedDown;
+	}
+
+      NewInput->MouseController.X = OldInput->MouseController.X;
+      NewInput->MouseController.Y = OldInput->MouseController.Y;
+      NewInput->MouseController.XRel = OldInput->MouseController.XRel;
+      NewInput->MouseController.YRel = OldInput->MouseController.YRel;
       
       SDL_Event Event;
       while(SDL_PollEvent(&Event))
 	{
-	  // TODO(Jovan): Move this somewhere else maybe?
-	  if(Event.type == SDL_MOUSEMOTION)
-	    {
-	      SimState->Yaw += Event.motion.xrel * MouseSensitivity;
-	      SimState->Pitch += -Event.motion.yrel * MouseSensitivity;
-	      if(SimState->Pitch > 89.0f)
-		{
-		  SimState->Pitch = 89.0f;
-		}
-	      if(SimState->Pitch < -89.0f)
-		{
-		  SimState->Pitch = -89.0f;
-		}
-	    }
 	  // NOTE(Jovan): Check for exit
-	  if(SDLHandleEvent(&Event))
+	  if(SDLHandleEvent(&Event, NewInput))
 	    {
 	      Running = 0;
 	    }
 	}
 
+      // NOTE(Jovan): Camera update
+      UpdateCamera(SimState, NewInput);
+
+      real32 CameraSpeed = 0.05f;
+      if(NewInput->KeyboardController.MoveForward.EndedDown)
+	{
+	  CameraPos += CameraSpeed * CameraFront;
+	}
+      if(NewInput->KeyboardController.MoveLeft.EndedDown)
+	{
+	  CameraPos -= glm::normalize(glm::cross(CameraFront, CameraUp)) * CameraSpeed;
+	}
+      if(NewInput->KeyboardController.MoveBack.EndedDown)
+	{
+	  CameraPos -= CameraSpeed * CameraFront;
+	}
+      if(NewInput->KeyboardController.MoveRight.EndedDown)
+	{
+	  CameraPos += glm::normalize(glm::cross(CameraFront, CameraUp)) * CameraSpeed;
+	}
+    
+      // TODO(Jovan): Maybe move to sdl_camera???
       glm::vec3 Front;
-      Front.x = cos(glm::radians(SimState->Yaw)) * cos(glm::radians(SimState->Pitch));
-      Front.y = sin(glm::radians(SimState->Pitch));
-      Front.z = sin(glm::radians(SimState->Yaw)) * cos(glm::radians(SimState->Pitch));
+      Front.x = cos(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
+      Front.y = sin(glm::radians(SimState->Camera.Pitch));
+      Front.z = sin(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
       CameraFront = glm::normalize(Front);
       View = glm::lookAt(CameraPos, CameraPos + CameraFront, CameraUp);
       
@@ -543,10 +627,11 @@ int main()
 	  ++CubeIndex)
 	{
 	  int32 CubeSize = 1.0f;
-	  real32 Angle = 50.0f;
+	  local_persist real32 Angle = 50.0f;
+	  Angle += dt * 2.0f;
 	  Model = glm::mat4(1.0f);
 	  Model = glm::scale(Model, glm::vec3(CubeSize, CubeSize, CubeSize));
-	  Model = glm::translate(Model, glm::vec3(0.0, 0.0, 0.0));//SimState->Positions[CubeIndex]);
+	  Model = glm::translate(Model, SimState->Positions[CubeIndex]);
 	  Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(1.0f, 1.0f, 1.0f));
 	  SetUniformM4(CubeShaderProgram, "Model", Model);
 	  glBindVertexArray(CubeVAO);
@@ -568,8 +653,13 @@ int main()
       real32 MSPerFrame = 1000.0f * SDLGetSecondsElapsed(LastCounter, EndCounter);
       dt = SPerFrame;
       LastCounter = EndCounter;
+      char Buffer[256];
+      sprintf(Buffer, "MSPerFrame = %f, FPS = %f", MSPerFrame, FPS);
+      SDL_SetWindowTitle(Window, Buffer );
 
-      printf("MSPerFrame = %f, FPS = %f\n", MSPerFrame, FPS);
+      sdl_input* Temp = NewInput;
+      NewInput = OldInput;
+      OldInput = Temp;
       
     }
   
