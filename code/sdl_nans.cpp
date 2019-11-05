@@ -2,6 +2,7 @@
 #include <GL/glew.h>
 #include <SDL2/SDL.h>
 #include <stdint.h>
+#include <sys/mman.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -25,13 +26,45 @@ typedef size_t memory_index;
 typedef float real32;
 typedef double real64;
 
+#define Kibibytes(Value) ((Value) * 1024LL)
+#define Mebibytes(Value) (Kibibytes(Value) * 1024LL)
+#define Gibibytes(Value) (Mebibytes(Value) * 1024LL)
+
+#define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
+
+#if SLOW_BUILD
+#define Assert(Expression)			\
+  if(!(Expression)) {*(int*)0 = 0;}
+#else
+#define Assert(Expression)
+#endif
+
 #define DEFAULT_WINDOW_WIDTH 1024
 #define DEFAULT_WINDOW_HEIGHT 768
+#define MAX_CUBE_COUNT 64
 #define internal static
 #define global_variable static
 #define local_persist static
 
 global_variable uint64 GlobalPerfCountFrequency;
+
+struct sdl_state
+{
+  glm::vec3 Positions[64];
+  real32 FOV;
+  real32 Pitch;
+  real32 Yaw;
+};
+
+struct memory
+{
+  void* PermanentStorage;
+  uint64 PermanentStorageSize;
+  void* TransientStorage;
+  uint64 TransientStorageSize;
+
+  bool32 IsInitialized;
+};
 
 internal const char*
 LoadShader(const char* Path)
@@ -210,13 +243,30 @@ SDLGetSecondsElapsed(int64 Start, int64 End)
 int main()
 {
 
+  // NOTE(Jovan): Memory allocation
+  memory SimMemory = {};
+  SimMemory.PermanentStorageSize = Mebibytes(64);
+  SimMemory.TransientStorageSize = Mebibytes(64);
+  uint64 TotalStorageSize = SimMemory.PermanentStorageSize +
+    SimMemory.TransientStorageSize;
+  SimMemory.PermanentStorage = mmap(0,
+				    TotalStorageSize,
+				    PROT_READ | PROT_WRITE,
+				    MAP_ANON | MAP_PRIVATE,
+				    -1,
+				    0);
+  SimMemory.TransientStorage = ((uint8*)SimMemory.PermanentStorage +
+				SimMemory.PermanentStorageSize);
+  Assert(SimMemory.PermanentStorage != (void*)-1);
+  Assert(SimMemory.TransientStorage != (void*)-1);
   // NOTE(Jovan): SDL stuff
   // --------------------
   SDL_Window* Window = 0;
   SDL_GLContext GLContext = 0;
   GlobalPerfCountFrequency = SDL_GetPerformanceFrequency();
-  real32 GameUpdateHz = 60.0f;
-  real32 TargetSecondsPerFrame = 1.0f / GameUpdateHz;
+  real32 SimUpdatehz = 60.0f;
+  real32 TargetSecondsPerFrame = 1.0f / SimUpdatehz;
+
 
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 0);
@@ -377,15 +427,22 @@ int main()
 
   // NOTE(Jovan): Coordinate systems
   // -------------------------------
-  real32 FOV = 45.0f; 
-  glm::mat4 Projection = glm::perspective(glm::radians(FOV),
+  glm::mat4 Projection = glm::perspective(glm::radians(45.0f),
 					  (real32)Width / (real32)Height,
 					  0.1f,
 					  100.0f);
   glm::mat4 Model = glm::mat4(1.0f);
   glm::mat4 View = glm::mat4(1.0f);
   View = glm::translate(View, glm::vec3(0.0f, 0.0f, -3.0f));
-  
+  glm::vec3 CameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+  glm::vec3 CameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
+  glm::vec3 CameraDirection = glm::normalize(CameraPos - CameraTarget);
+  glm::vec3 Up = glm::vec3(0.0f, 1.0f, 0.0f);
+  glm::vec3 CameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+  glm::vec3 CameraRight = glm::normalize(glm::cross(Up, CameraDirection));
+  glm::vec3 CameraUp = glm::cross(CameraDirection, CameraRight);
+  View = glm::lookAt(CameraPos, CameraPos + CameraFront, CameraUp);
+
   // NOTE(Jovan): End of coordinate systems
   // --------------------------------------
 
@@ -395,11 +452,47 @@ int main()
   bool32 Running = 1;
   uint64 LastCounter = SDLGetWallClock();
   real32 dt = 0.0f;
+  real32 MouseSensitivity = 0.5f;
+  // NOTE(Jovan): Grab mouse
+  SDL_SetRelativeMouseMode(SDL_TRUE);
   while(Running)
     {
+
+      // TODO(Jovan): Move to sim update / render
+      sdl_state* SimState = (sdl_state*)SimMemory.PermanentStorage;
+      if(!SimMemory.IsInitialized)
+	{
+	  SimState->FOV = 45.0f; 
+	  SimState->Pitch = 0.0f;
+	  SimState->Yaw = -90.0f;
+	  for(int CubeIndex = 0;
+	      CubeIndex < 3;
+	      ++CubeIndex)
+	    {
+	      SimState->Positions[CubeIndex] = glm::vec3(0.2*CubeIndex,
+							 0.3*CubeIndex,
+							 0.4*CubeIndex);
+	    }
+	  SimMemory.IsInitialized = 1;
+	}
+      
       SDL_Event Event;
       while(SDL_PollEvent(&Event))
 	{
+	  // TODO(Jovan): Move this somewhere else maybe?
+	  if(Event.type == SDL_MOUSEMOTION)
+	    {
+	      SimState->Yaw += Event.motion.xrel * MouseSensitivity;
+	      SimState->Pitch += -Event.motion.yrel * MouseSensitivity;
+	      if(SimState->Pitch > 89.0f)
+		{
+		  SimState->Pitch = 89.0f;
+		}
+	      if(SimState->Pitch < -89.0f)
+		{
+		  SimState->Pitch = -89.0f;
+		}
+	    }
 	  // NOTE(Jovan): Check for exit
 	  if(SDLHandleEvent(&Event))
 	    {
@@ -407,6 +500,13 @@ int main()
 	    }
 	}
 
+      glm::vec3 Front;
+      Front.x = cos(glm::radians(SimState->Yaw)) * cos(glm::radians(SimState->Pitch));
+      Front.y = sin(glm::radians(SimState->Pitch));
+      Front.z = sin(glm::radians(SimState->Yaw)) * cos(glm::radians(SimState->Pitch));
+      CameraFront = glm::normalize(Front);
+      View = glm::lookAt(CameraPos, CameraPos + CameraFront, CameraUp);
+      
       // NOTE(Jovan): Work timing
       int64 WorkCounter = SDLGetWallClock();
       real32 WorkSecondsElapsed = SDLGetSecondsElapsed(LastCounter, WorkCounter);
@@ -433,15 +533,25 @@ int main()
       // NOTE(Jovan): Cube drawing
       // -------------------------
       glUseProgram(CubeShaderProgram);
+      glBindTexture(GL_TEXTURE_2D, CubeTexture);
 
-      Model = glm::rotate(Model, dt * glm::radians(-55.0f), glm::vec3(1.0f, 1.0f, 1.0f));
-      SetUniformM4(CubeShaderProgram, "Model", Model);
       SetUniformM4(CubeShaderProgram, "View", View);
       SetUniformM4(CubeShaderProgram, "Projection", Projection);
-      
-      glBindTexture(GL_TEXTURE_2D, CubeTexture);
-      glBindVertexArray(CubeVAO);
-      glDrawArrays(GL_TRIANGLES, 0, 36);
+
+      for(int CubeIndex = 0;
+	  CubeIndex < 10;
+	  ++CubeIndex)
+	{
+	  int32 CubeSize = 1.0f;
+	  real32 Angle = 50.0f;
+	  Model = glm::mat4(1.0f);
+	  Model = glm::scale(Model, glm::vec3(CubeSize, CubeSize, CubeSize));
+	  Model = glm::translate(Model, glm::vec3(0.0, 0.0, 0.0));//SimState->Positions[CubeIndex]);
+	  Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(1.0f, 1.0f, 1.0f));
+	  SetUniformM4(CubeShaderProgram, "Model", Model);
+	  glBindVertexArray(CubeVAO);
+	  glDrawArrays(GL_TRIANGLES, 0, 36);
+	}
 
       // NOTE(Jovan): End cube drawing
       // -----------------------------
