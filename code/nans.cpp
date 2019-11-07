@@ -110,8 +110,9 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       ++CubeIndex)
     {
       int32 CubeSize = 1.0f;
+      // TODO(Jovan): Remove local persist, use game state
       local_persist real32 Angle = 50.0f;
-      Angle += dt * 2.0f;
+      Angle += dt * +5.0f;
       Model = glm::mat4(1.0f);
       Model = glm::scale(Model, glm::vec3(CubeSize, CubeSize, CubeSize));
       Model = glm::translate(Model, SimState->Positions[CubeIndex]);

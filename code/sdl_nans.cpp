@@ -8,6 +8,9 @@
 #include <SDL2/SDL.h>
 #include <sys/mman.h>
 #include <dlfcn.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "sdl_nans.h"
 
@@ -224,12 +227,25 @@ SDLGetSecondsElapsed(int64 Start, int64 End)
   return Result;
 }
 
-internal sdl_sim_code
-SDLLoadSimCode(void)
+internal inline time_t
+SDLGetLastWriteTime(char* Filename)
 {
-  char *DynLibName = "dwarves.so";
+  struct stat FileInfo = {};
+  time_t Result = 0;
+  if(stat(Filename, &FileInfo) != -1)
+    {
+      Result = FileInfo.st_mtim.tv_sec;
+    }
+
+  return Result;
+}
+
+internal sdl_sim_code
+SDLLoadSimCode(char* DynLibName)
+{
   sdl_sim_code Result = {};
   Result.SimCodeDynLib = dlopen(DynLibName, RTLD_NOW | RTLD_GLOBAL);
+  Result.DynLibLastWriteTime = SDLGetLastWriteTime(DynLibName);
 
   if(Result.SimCodeDynLib)
     {
@@ -241,14 +257,29 @@ SDLLoadSimCode(void)
   
   if(!Result.IsValid)
     {
+      printf("WARNING::SimCode::Not loaded properly, using stub.\n");
       Result.UpdateAndRender = SimUpdateAndRenderStub;
     }
+  
   return Result;
+}
+
+internal void
+SDLUnloadSimCode(sdl_sim_code* SimCode)
+{
+  if(dlclose(SimCode->SimCodeDynLib))
+    {
+      printf("ERROR::SimCode::Not unloaded properly.\n");
+      char* Error = dlerror();
+      printf("%s\n", Error);
+    }
+  SimCode->SimCodeDynLib = 0;
+  SimCode->IsValid = 0;
+  SimCode->UpdateAndRender = SimUpdateAndRenderStub;
 }
 
 int main()
 {
-  sdl_sim_code Sim = SDLLoadSimCode();
 
   // NOTE(Jovan): Memory allocation
   memory SimMemory = {};
@@ -454,10 +485,20 @@ int main()
   Render.Shaders[0] = CubeShaderProgram;
   Render.Textures[0] = CubeTexture;
   Render.VAOs[0] = CubeVAO;
-  
+
+  sdl_sim_code Sim = SDLLoadSimCode("nans.so");
   while(Running)
     {
 
+      time_t NewDynLibWriteTime = SDLGetLastWriteTime("nans.so");
+      if((NewDynLibWriteTime != Sim.DynLibLastWriteTime))
+	{
+	  printf("nans.so difference: %ld\n", NewDynLibWriteTime - Sim.DynLibLastWriteTime);
+	  printf("Code changed!\n");
+	  SDLUnloadSimCode(&Sim);
+	  SDL_Delay(100);
+	  Sim = SDLLoadSimCode("nans.so");
+	}
 
       sdl_keyboard* OldKeyboardController = &OldInput->KeyboardController;
       sdl_keyboard* NewKeyboardController = &NewInput->KeyboardController;
@@ -536,7 +577,6 @@ int main()
       sdl_input* Temp = NewInput;
       NewInput = OldInput;
       OldInput = Temp;
-      
     }
   
   return 0;
