@@ -1,14 +1,10 @@
-#include <iostream>
-#include <GL/glew.h>
-#include <SDL2/SDL.h>
-#include <stdint.h>
-#include <sys/mman.h>
-
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#include <GL/glew.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <SDL2/SDL.h>
+#include <sys/mman.h>
 
 typedef int8_t int8;
 typedef int16_t int16;
@@ -126,10 +122,15 @@ CheckShaderCompilation(uint32 Shader, shader_type Type)
   if(!success)
     {
       glGetShaderInfoLog(Shader, 512, NULL, infoLog);
-      std::cout <<
-	(Type == Vertex ? "ERROR::SHADER::VERTEX:COMPILATION_FAILED"
-	 : "ERROR::SHADER::FRAGMENT:COMPILATION_FAILED")
-		<< std::endl << infoLog << std::endl;
+      if(Type == Vertex)
+	{
+	  printf("ERROR::SHADER::VERTEX:COMPILATION_FAILED\n");
+	}
+      else
+	{
+	  printf("ERROR::SHADER::FRAGMENT:COMPILATION_FAILED\n");
+	}
+      printf("%s\n", infoLog);
     }  
 }
 
@@ -143,20 +144,8 @@ CheckShaderLink(uint32 Program)
   if(!success)
     {
       glGetProgramInfoLog(Program, 512, NULL, infoLog);
-      std::cout << "ERROR::SHADER_PROGRAM::LINKING_FAILED" << std::endl << infoLog << std::endl;
+      printf("ERROR::SHADER_PROGRAM::LINKING_FAILED\n%s\n", infoLog);
     }
-}
-
-internal void
-SetUniformM4(uint32 ID, char* Uniform, const glm::mat4 &Mat4)
-{
-  glUniformMatrix4fv(glGetUniformLocation(ID, Uniform), 1, GL_FALSE, &Mat4[0][0]);
-}
-
-void
-SDLWindowResize(int32 Width, int32 Height)
-{
-  glViewport(0, 0, Width, Height);
 }
 
 internal void
@@ -165,6 +154,12 @@ SDLProcessSimKeyboardButton(sdl_button_state* NewState, bool32 IsDown)
   Assert(NewState->EndedDown != IsDown);
   NewState->EndedDown = IsDown;
   ++NewState->HalfTransitionCount;
+}
+
+void
+SDLWindowResize(int32 Width, int32 Height)
+{
+  glViewport(0, 0, Width, Height);
 }
 
 internal bool32
@@ -263,6 +258,12 @@ SDLGetSecondsElapsed(int64 Start, int64 End)
 }
 
 internal void
+SetUniformM4(uint32 ID, char* Uniform, const glm::mat4 &Mat4)
+{
+  glUniformMatrix4fv(glGetUniformLocation(ID, Uniform), 1, GL_FALSE, &Mat4[0][0]);
+}
+
+internal void
 UpdateCamera(sdl_state* State, sdl_input* Input)
 {
 
@@ -278,6 +279,109 @@ UpdateCamera(sdl_state* State, sdl_input* Input)
     {
       State->Camera.Pitch = -89.0f;
     }
+}
+
+void
+UpdateAndRender(memory* Memory, sdl_input* Input, sdl_render* Render, real32 dt)
+{
+  sdl_state* SimState = (sdl_state*)Memory->PermanentStorage;
+  if(!Memory->IsInitialized)
+    {
+	  
+      // NOTE(Jovan): Camera init
+      SimState->Camera.FOV = 45.0f; 
+      SimState->Camera.Pitch = 0.0f;
+      SimState->Camera.Yaw = -90.0f;
+      SimState->Camera.Position = glm::vec3(0.0f, 0.0f, 3.0f);
+      glm::vec3 Up = glm::vec3(0.0f, 1.0f, 0.0f);
+      SimState->Camera.Target = glm::vec3(0.0f, 0.0f, 0.0f);
+      SimState->Camera.Direction = glm::normalize(SimState->Camera.Position - SimState->Camera.Target);
+      SimState->Camera.Front = glm::vec3(0.0f, 0.0f, -1.0f);
+      SimState->Camera.Right = glm::normalize(glm::cross(Up, SimState->Camera.Direction));
+      SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
+	  
+      // TODO(Jovan): Remove, only for testing
+      for(int CubeIndex = 0;
+	  CubeIndex < 10;
+	  ++CubeIndex)
+	{
+	  SimState->Positions[CubeIndex] = glm::vec3(0.5*CubeIndex,
+						     1.0*CubeIndex,
+						     1.5*CubeIndex);
+	}
+      
+      Memory->IsInitialized = 1;
+    }
+
+  // NOTE(Jovan): Coordinate systems
+  // -------------------------------
+  glm::mat4 Projection = glm::perspective(glm::radians(45.0f),
+					  (real32)DEFAULT_WINDOW_WIDTH / (real32)DEFAULT_WINDOW_HEIGHT,
+					  0.1f,
+					  100.0f);
+  glm::mat4 Model = glm::mat4(1.0f);
+  glm::mat4 View = glm::mat4(1.0f);
+  View = glm::translate(View, glm::vec3(0.0f, 0.0f, -3.0f));
+  View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
+		     SimState->Camera.Up);
+  
+  // NOTE(Jovan): Camera update
+  UpdateCamera(SimState, Input);
+  
+  real32 CameraSpeed = 0.05f;
+  if(Input->KeyboardController.MoveForward.EndedDown)
+    {
+      SimState->Camera.Position += CameraSpeed * SimState->Camera.Front;
+    }
+  if(Input->KeyboardController.MoveLeft.EndedDown)
+    {
+      SimState->Camera.Position -= glm::normalize(glm::cross(SimState->Camera.Front, SimState->Camera.Up)) * CameraSpeed;
+    }
+  if(Input->KeyboardController.MoveBack.EndedDown)
+    {
+      SimState->Camera.Position -= CameraSpeed * SimState->Camera.Front;
+    }
+  if(Input->KeyboardController.MoveRight.EndedDown)
+    {
+      SimState->Camera.Position += glm::normalize(glm::cross(SimState->Camera.Front, SimState->Camera.Up)) * CameraSpeed;
+    }
+
+  // TODO(Jovan): Maybe move to sdl_camera???
+  glm::vec3 Front;
+  Front.x = cos(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
+  Front.y = sin(glm::radians(SimState->Camera.Pitch));
+  Front.z = sin(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
+  SimState->Camera.Front = glm::normalize(Front);
+  View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
+		     SimState->Camera.Up);
+  
+  // NOTE(Jovan): Cube drawing
+  // -------------------------
+  glUseProgram(Render->Shaders[0]);
+  glBindTexture(GL_TEXTURE_2D, Render->Textures[0]);
+
+  SetUniformM4(Render->Shaders[0], "View", View);
+  SetUniformM4(Render->Shaders[0], "Projection", Projection);
+
+  for(int CubeIndex = 0;
+      CubeIndex < 10;
+      ++CubeIndex)
+    {
+      int32 CubeSize = 1.0f;
+      local_persist real32 Angle = 50.0f;
+      Angle += dt * 2.0f;
+      Model = glm::mat4(1.0f);
+      Model = glm::scale(Model, glm::vec3(CubeSize, CubeSize, CubeSize));
+      Model = glm::translate(Model, SimState->Positions[CubeIndex]);
+      Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(1.0f, 1.0f, 1.0f));
+      SetUniformM4(Render->Shaders[0], "Model", Model);
+      glBindVertexArray(Render->VAOs[0]);
+      glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+
+  // NOTE(Jovan): End cube drawing
+  // -----------------------------
+        
 }
 
 int main()
@@ -465,31 +569,12 @@ int main()
   // NOTE(Jovan): End of GL modeling and buffering
   // ---------------------------------------------
 
-  // NOTE(Jovan): Coordinate systems
-  // -------------------------------
-  glm::mat4 Projection = glm::perspective(glm::radians(45.0f),
-					  (real32)Width / (real32)Height,
-					  0.1f,
-					  100.0f);
-  glm::mat4 Model = glm::mat4(1.0f);
-  glm::mat4 View = glm::mat4(1.0f);
-  View = glm::translate(View, glm::vec3(0.0f, 0.0f, -3.0f));
-  glm::vec3 CameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-  glm::vec3 CameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
-  glm::vec3 CameraDirection = glm::normalize(CameraPos - CameraTarget);
-  glm::vec3 Up = glm::vec3(0.0f, 1.0f, 0.0f);
-  glm::vec3 CameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-  glm::vec3 CameraRight = glm::normalize(glm::cross(Up, CameraDirection));
-  glm::vec3 CameraUp = glm::cross(CameraDirection, CameraRight);
-  View = glm::lookAt(CameraPos, CameraPos + CameraFront, CameraUp);
 
   // NOTE(Jovan): End of coordinate systems
   // --------------------------------------
 
   glEnable(GL_DEPTH_TEST);
 
-
-  
   // NOTE(Jovan): Main loop
   bool32 Running = 1;
   uint64 LastCounter = SDLGetWallClock();
@@ -502,33 +587,14 @@ int main()
   
   // NOTE(Jovan): Grab mouse
   SDL_SetRelativeMouseMode(SDL_TRUE);
+  sdl_render Render = {};
+  Render.Shaders[0] = CubeShaderProgram;
+  Render.Textures[0] = CubeTexture;
+  Render.VAOs[0] = CubeVAO;
+
   while(Running)
     {
-      
-      // TODO(Jovan): Move to sim update / render
-      sdl_state* SimState = (sdl_state*)SimMemory.PermanentStorage;
-      if(!SimMemory.IsInitialized)
-	{
-	  
-	  // NOTE(Jovan): Camera init
-	  SimState->Camera.FOV = 45.0f; 
-	  SimState->Camera.Pitch = 0.0f;
-	  SimState->Camera.Yaw = -90.0f;
-	  SimState->Camera.X = 0.0f;
-	  SimState->Camera.Y = 0.0f;
-	  SimState->Camera.Z = -3.0f;
-	  
-	  // TODO(Jovan): Remove, only for testing
-	  for(int CubeIndex = 0;
-	      CubeIndex < 10;
-	      ++CubeIndex)
-	    {
-	      SimState->Positions[CubeIndex] = glm::vec3(0.5*CubeIndex,
-							 1.0*CubeIndex,
-							 1.5*CubeIndex);
-	    }
-	  SimMemory.IsInitialized = 1;
-	}
+
 
       sdl_keyboard* OldKeyboardController = &OldInput->KeyboardController;
       sdl_keyboard* NewKeyboardController = &NewInput->KeyboardController;
@@ -562,34 +628,7 @@ int main()
 	    }
 	}
 
-      // NOTE(Jovan): Camera update
-      UpdateCamera(SimState, NewInput);
-
-      real32 CameraSpeed = 0.05f;
-      if(NewInput->KeyboardController.MoveForward.EndedDown)
-	{
-	  CameraPos += CameraSpeed * CameraFront;
-	}
-      if(NewInput->KeyboardController.MoveLeft.EndedDown)
-	{
-	  CameraPos -= glm::normalize(glm::cross(CameraFront, CameraUp)) * CameraSpeed;
-	}
-      if(NewInput->KeyboardController.MoveBack.EndedDown)
-	{
-	  CameraPos -= CameraSpeed * CameraFront;
-	}
-      if(NewInput->KeyboardController.MoveRight.EndedDown)
-	{
-	  CameraPos += glm::normalize(glm::cross(CameraFront, CameraUp)) * CameraSpeed;
-	}
     
-      // TODO(Jovan): Maybe move to sdl_camera???
-      glm::vec3 Front;
-      Front.x = cos(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
-      Front.y = sin(glm::radians(SimState->Camera.Pitch));
-      Front.z = sin(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
-      CameraFront = glm::normalize(Front);
-      View = glm::lookAt(CameraPos, CameraPos + CameraFront, CameraUp);
       
       // NOTE(Jovan): Work timing
       int64 WorkCounter = SDLGetWallClock();
@@ -613,34 +652,8 @@ int main()
 
       glClearColor(0.8f, 0.0f, 0.8f, 1.0f);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-      // NOTE(Jovan): Cube drawing
-      // -------------------------
-      glUseProgram(CubeShaderProgram);
-      glBindTexture(GL_TEXTURE_2D, CubeTexture);
-
-      SetUniformM4(CubeShaderProgram, "View", View);
-      SetUniformM4(CubeShaderProgram, "Projection", Projection);
-
-      for(int CubeIndex = 0;
-	  CubeIndex < 10;
-	  ++CubeIndex)
-	{
-	  int32 CubeSize = 1.0f;
-	  local_persist real32 Angle = 50.0f;
-	  Angle += dt * 2.0f;
-	  Model = glm::mat4(1.0f);
-	  Model = glm::scale(Model, glm::vec3(CubeSize, CubeSize, CubeSize));
-	  Model = glm::translate(Model, SimState->Positions[CubeIndex]);
-	  Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(1.0f, 1.0f, 1.0f));
-	  SetUniformM4(CubeShaderProgram, "Model", Model);
-	  glBindVertexArray(CubeVAO);
-	  glDrawArrays(GL_TRIANGLES, 0, 36);
-	}
-
-      // NOTE(Jovan): End cube drawing
-      // -----------------------------
-      
+      UpdateAndRender(&SimMemory, NewInput, &Render, dt);
+	
       glBindVertexArray(0);
 
       // NOTE(Jovan): Swap buffers

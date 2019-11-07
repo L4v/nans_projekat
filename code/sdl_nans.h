@@ -2,17 +2,6 @@ enum shader_type{
      Vertex = 0,
      Fragment
 };
-
-struct memory
-{
-  void* PermanentStorage;
-  uint64 PermanentStorageSize;
-  void* TransientStorage;
-  uint64 TransientStorageSize;
-
-  bool32 IsInitialized;
-};
-
 struct sdl_mouse
 {
   real32 Sensitivity;
@@ -54,9 +43,31 @@ struct sdl_camera
   real32 FOV;
   real32 Pitch;
   real32 Yaw;
-  real32 X;
-  real32 Y;
-  real32 Z;
+  
+  glm::vec3 Position;
+  glm::vec3 Target;
+  glm::vec3 Direction;
+  
+  glm::vec3 Up;
+  glm::vec3 Front;
+  glm::vec3 Right;
+};
+
+struct memory
+{
+  void* PermanentStorage;
+  uint64 PermanentStorageSize;
+  void* TransientStorage;
+  uint64 TransientStorageSize;
+
+  bool32 IsInitialized;
+};
+
+struct sdl_render
+{
+  uint32 Shaders[1];
+  uint32 Textures[1];
+  uint32 VAOs[1];
 };
 
 struct sdl_state
@@ -64,3 +75,4 @@ struct sdl_state
   glm::vec3 Positions[10];
   sdl_camera Camera;
 };
+
