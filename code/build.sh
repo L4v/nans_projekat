@@ -8,6 +8,7 @@ CompilerFlags=( -DSLOW_BUILD
 		-Wno-unused-but-set-variable)
 LinkerFlags=(-lGL -lGLEW `sdl2-config --cflags --libs` -ldl)
 
+g++ ${CompilerFlags[*]} -shared -fpic ../code/nans.cpp -o nans.so ${LinkerFlags[*]}
 g++ ${CompilerFlags[*]} ../code/sdl_nans.cpp -o nans ${LinkerFlags[*]}
 
 popd

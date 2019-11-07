@@ -1,3 +1,5 @@
+#include "nans.h"
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include <GL/glew.h>
@@ -5,44 +7,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <SDL2/SDL.h>
 #include <sys/mman.h>
-
-typedef int8_t int8;
-typedef int16_t int16;
-typedef int32_t int32;
-typedef int64_t int64;
-typedef int32 bool32;
-
-typedef uint8_t uint8;
-typedef uint16_t uint16;
-typedef uint32_t uint32;
-typedef uint64_t uint64;
-
-typedef size_t memory_index;
-
-typedef float real32;
-typedef double real64;
+#include <dlfcn.h>
 
 #include "sdl_nans.h"
-
-#define Kibibytes(Value) ((Value) * 1024LL)
-#define Mebibytes(Value) (Kibibytes(Value) * 1024LL)
-#define Gibibytes(Value) (Mebibytes(Value) * 1024LL)
-
-#define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
-
-#if SLOW_BUILD
-#define Assert(Expression)			\
-  if(!(Expression)) {*(int*)0 = 0;}
-#else
-#define Assert(Expression)
-#endif
-
-#define DEFAULT_WINDOW_WIDTH 1024
-#define DEFAULT_WINDOW_HEIGHT 768
-#define MAX_CUBE_COUNT 64
-#define internal static
-#define global_variable static
-#define local_persist static
 
 global_variable uint64 GlobalPerfCountFrequency;
 
@@ -257,135 +224,31 @@ SDLGetSecondsElapsed(int64 Start, int64 End)
   return Result;
 }
 
-internal void
-SetUniformM4(uint32 ID, char* Uniform, const glm::mat4 &Mat4)
+internal sdl_sim_code
+SDLLoadSimCode(void)
 {
-  glUniformMatrix4fv(glGetUniformLocation(ID, Uniform), 1, GL_FALSE, &Mat4[0][0]);
-}
+  char *DynLibName = "dwarves.so";
+  sdl_sim_code Result = {};
+  Result.SimCodeDynLib = dlopen(DynLibName, RTLD_NOW | RTLD_GLOBAL);
 
-internal void
-UpdateCamera(sdl_state* State, sdl_input* Input)
-{
-
-  State->Camera.Yaw += Input->MouseController.XRel * Input->MouseController.Sensitivity;
-  State->Camera.Pitch += -Input->MouseController.YRel * Input->MouseController.Sensitivity;
-  Input->MouseController.XRel = 0.0f;
-  Input->MouseController.YRel = 0.0f;
-  if(State->Camera.Pitch > 89.0f)
+  if(Result.SimCodeDynLib)
     {
-      State->Camera.Pitch = 89.0f;
-    }
-  if(State->Camera.Pitch < -89.0f)
-    {
-      State->Camera.Pitch = -89.0f;
-    }
-}
+      Result.UpdateAndRender = (sim_update_and_render*)
+	dlsym(Result.SimCodeDynLib, "SimUpdateAndRender");
 
-void
-UpdateAndRender(memory* Memory, sdl_input* Input, sdl_render* Render, real32 dt)
-{
-  sdl_state* SimState = (sdl_state*)Memory->PermanentStorage;
-  if(!Memory->IsInitialized)
-    {
-	  
-      // NOTE(Jovan): Camera init
-      SimState->Camera.FOV = 45.0f; 
-      SimState->Camera.Pitch = 0.0f;
-      SimState->Camera.Yaw = -90.0f;
-      SimState->Camera.Position = glm::vec3(0.0f, 0.0f, 3.0f);
-      glm::vec3 Up = glm::vec3(0.0f, 1.0f, 0.0f);
-      SimState->Camera.Target = glm::vec3(0.0f, 0.0f, 0.0f);
-      SimState->Camera.Direction = glm::normalize(SimState->Camera.Position - SimState->Camera.Target);
-      SimState->Camera.Front = glm::vec3(0.0f, 0.0f, -1.0f);
-      SimState->Camera.Right = glm::normalize(glm::cross(Up, SimState->Camera.Direction));
-      SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
-	  
-      // TODO(Jovan): Remove, only for testing
-      for(int CubeIndex = 0;
-	  CubeIndex < 10;
-	  ++CubeIndex)
-	{
-	  SimState->Positions[CubeIndex] = glm::vec3(0.5*CubeIndex,
-						     1.0*CubeIndex,
-						     1.5*CubeIndex);
-	}
-      
-      Memory->IsInitialized = 1;
+      Result.IsValid = (Result.UpdateAndRender != 0);
     }
-
-  // NOTE(Jovan): Coordinate systems
-  // -------------------------------
-  glm::mat4 Projection = glm::perspective(glm::radians(45.0f),
-					  (real32)DEFAULT_WINDOW_WIDTH / (real32)DEFAULT_WINDOW_HEIGHT,
-					  0.1f,
-					  100.0f);
-  glm::mat4 Model = glm::mat4(1.0f);
-  glm::mat4 View = glm::mat4(1.0f);
-  View = glm::translate(View, glm::vec3(0.0f, 0.0f, -3.0f));
-  View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
-		     SimState->Camera.Up);
   
-  // NOTE(Jovan): Camera update
-  UpdateCamera(SimState, Input);
-  
-  real32 CameraSpeed = 0.05f;
-  if(Input->KeyboardController.MoveForward.EndedDown)
+  if(!Result.IsValid)
     {
-      SimState->Camera.Position += CameraSpeed * SimState->Camera.Front;
+      Result.UpdateAndRender = SimUpdateAndRenderStub;
     }
-  if(Input->KeyboardController.MoveLeft.EndedDown)
-    {
-      SimState->Camera.Position -= glm::normalize(glm::cross(SimState->Camera.Front, SimState->Camera.Up)) * CameraSpeed;
-    }
-  if(Input->KeyboardController.MoveBack.EndedDown)
-    {
-      SimState->Camera.Position -= CameraSpeed * SimState->Camera.Front;
-    }
-  if(Input->KeyboardController.MoveRight.EndedDown)
-    {
-      SimState->Camera.Position += glm::normalize(glm::cross(SimState->Camera.Front, SimState->Camera.Up)) * CameraSpeed;
-    }
-
-  // TODO(Jovan): Maybe move to sdl_camera???
-  glm::vec3 Front;
-  Front.x = cos(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
-  Front.y = sin(glm::radians(SimState->Camera.Pitch));
-  Front.z = sin(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
-  SimState->Camera.Front = glm::normalize(Front);
-  View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
-		     SimState->Camera.Up);
-  
-  // NOTE(Jovan): Cube drawing
-  // -------------------------
-  glUseProgram(Render->Shaders[0]);
-  glBindTexture(GL_TEXTURE_2D, Render->Textures[0]);
-
-  SetUniformM4(Render->Shaders[0], "View", View);
-  SetUniformM4(Render->Shaders[0], "Projection", Projection);
-
-  for(int CubeIndex = 0;
-      CubeIndex < 10;
-      ++CubeIndex)
-    {
-      int32 CubeSize = 1.0f;
-      local_persist real32 Angle = 50.0f;
-      Angle += dt * 2.0f;
-      Model = glm::mat4(1.0f);
-      Model = glm::scale(Model, glm::vec3(CubeSize, CubeSize, CubeSize));
-      Model = glm::translate(Model, SimState->Positions[CubeIndex]);
-      Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(1.0f, 1.0f, 1.0f));
-      SetUniformM4(Render->Shaders[0], "Model", Model);
-      glBindVertexArray(Render->VAOs[0]);
-      glDrawArrays(GL_TRIANGLES, 0, 36);
-    }
-
-  // NOTE(Jovan): End cube drawing
-  // -----------------------------
-        
+  return Result;
 }
 
 int main()
 {
+  sdl_sim_code Sim = SDLLoadSimCode();
 
   // NOTE(Jovan): Memory allocation
   memory SimMemory = {};
@@ -591,7 +454,7 @@ int main()
   Render.Shaders[0] = CubeShaderProgram;
   Render.Textures[0] = CubeTexture;
   Render.VAOs[0] = CubeVAO;
-
+  
   while(Running)
     {
 
@@ -649,10 +512,10 @@ int main()
 	{
 	  // TODO(Jovan): Missed frame rate???
 	}
-
+      
       glClearColor(0.8f, 0.0f, 0.8f, 1.0f);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-      UpdateAndRender(&SimMemory, NewInput, &Render, dt);
+      Sim.UpdateAndRender(&SimMemory, NewInput, &Render, dt);
 	
       glBindVertexArray(0);
 
