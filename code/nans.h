@@ -27,6 +27,9 @@ typedef size_t memory_index;
 typedef float real32;
 typedef double real64;
 
+// NOTE(Jovan): Just for testing purposes
+// #include "matmath.h"
+
 #define Kibibytes(Value) ((Value) * 1024LL)
 #define Mebibytes(Value) (Kibibytes(Value) * 1024LL)
 #define Gibibytes(Value) (Mebibytes(Value) * 1024LL)
