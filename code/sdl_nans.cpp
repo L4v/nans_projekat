@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <vector>
 
 #include "sdl_nans.h"
 
@@ -346,14 +347,8 @@ int main()
   
   const char* CubeFragmentShaderSource = LoadShader("../shaders/cube.fs");
   const char* CubeVertexShaderSource = LoadShader("../shaders/cube.vs");
-
-  // real32 RectVertices[] = {
-  // 			   // X  |  Y   |  Z  | Tex coords 
-  // 			   -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, // LL
-  // 			   -0.5f,  0.5f, 0.0f, 0.0f, 1.0f, // UL
-  // 			    0.5f, -0.5f, 0.0f, 1.0f, 0.0f, // LR
-  // 			    0.5f,  0.5f, 0.0f, 1.0f, 1.0f  // UR
-  // };
+  const char* SphereVSSource = LoadShader("../shaders/sphere.vs");
+  const char* SphereFSSource = LoadShader("../shaders/sphere.fs");
 
   real32 RectVertices[] = {
 			   // X  |  Y   |  Z  | Tex coords
@@ -404,33 +399,93 @@ int main()
 			  0, 1, 3,
 			  0, 2, 3
   };
+
+  int32 Stacks = 20;
+  int32 Slices = 20;
+  
+  real32 Vertices[(Stacks + 1) * (Slices + 1) * 3];
+  uint32 Indices[(Slices * Stacks + Slices) * 6];
+
+  int32 Index = 0;
+  for(int i = 0; i <= Stacks; i++)
+    {
+      real32 V = (real32)i / (real32)Stacks;
+      real32 Phi = V * Pi32;
+      
+      for(int j = 0; j <= Slices; j++)
+	{
+	  real32 U = (real32)j / (real32)Slices;
+	  real32 Theta = U * (Pi32 * 2);
+
+	  real32 x = cos(Theta) * sin(Phi);
+	  real32 y = cos(Phi);
+	  real32 z = sin(Theta) * sin(Phi);
+
+	  Vertices[Index++] = x;
+	  Vertices[Index++] = y;
+	  Vertices[Index++] = z;
+	}
+    }
+  Index = 0;
+  for(int32 i = 0; i < Slices * Stacks + Slices; i++)
+    {
+      Indices[Index++] = i;
+      Indices[Index++] = i + Slices + 1;
+      Indices[Index++] = i + Slices;
+
+      Indices[Index++] = i + Slices + 1;
+      Indices[Index++] = i;
+      Indices[Index++] = i + 1;
+    }
   
   // NOTE(Jovan): Creating shaders and shader programs
-  uint32 CubeVertexShader, CubeFragmentShader;
+  uint32 CubeVertexShader, CubeFragmentShader,
+    SphereVS, SphereFS;
+  
   CubeVertexShader = glCreateShader(GL_VERTEX_SHADER);
   CubeFragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+  SphereVS  = glCreateShader(GL_VERTEX_SHADER);
+  SphereFS = glCreateShader(GL_FRAGMENT_SHADER);
 
   glShaderSource(CubeVertexShader, 1, &CubeVertexShaderSource, 0);
   glShaderSource(CubeFragmentShader, 1, &CubeFragmentShaderSource, 0);
+  glShaderSource(SphereVS, 1, &SphereVSSource, 0);
+  glShaderSource(SphereFS, 1, &SphereFSSource, 0);
+  glCompileShader(SphereVS);
+  CheckShaderCompilation(SphereVS, Vertex);
+  glCompileShader(SphereFS);
+  CheckShaderCompilation(SphereFS, Fragment);
 
   glCompileShader(CubeVertexShader);
   CheckShaderCompilation(CubeVertexShader, Vertex);
   glCompileShader(CubeFragmentShader);
   CheckShaderCompilation(CubeVertexShader, Fragment);
 
-  uint32 CubeShaderProgram;
+  uint32 CubeShaderProgram, SphereShaderProgram;
   CubeShaderProgram = glCreateProgram();
+  SphereShaderProgram = glCreateProgram();
+  
   glAttachShader(CubeShaderProgram, CubeVertexShader);
   glAttachShader(CubeShaderProgram, CubeFragmentShader);
+  glAttachShader(SphereShaderProgram, SphereVS);
+  glAttachShader(SphereShaderProgram, SphereFS);
+  
   glLinkProgram(CubeShaderProgram);
   CheckShaderLink(CubeShaderProgram);
+  
+  glLinkProgram(SphereShaderProgram);
+  CheckShaderLink(SphereShaderProgram);
 
   glDeleteShader(CubeVertexShader);
   glDeleteShader(CubeFragmentShader);
+  glDeleteShader(SphereVS);
+  glDeleteShader(SphereFS);
   
   // NOTE(Jovan): VAO, EBO, VBO
-  uint32 CubeVAO, CubeVBO, CubeEBO;
-  
+  uint32 CubeVAO, CubeVBO, CubeEBO,
+    SphereVAO, SphereVBO, SphereEBO;
+
+  // NOTE(Jovan): Cube data
   glGenVertexArrays(1, &CubeVAO);
   glBindVertexArray(CubeVAO);
   glGenBuffers(1, &CubeVBO);
@@ -453,19 +508,30 @@ int main()
   glEnableVertexAttribArray(1);
   glBindVertexArray(0);
 
+  // NOTE(Jovan): Sphere data
+  glGenVertexArrays(1, &SphereVAO);
+  glBindVertexArray(SphereVAO);
+  
+  glGenBuffers(1, &SphereVBO);
+  glBindBuffer(GL_ARRAY_BUFFER, SphereVBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_DYNAMIC_DRAW);
 
+  glGenBuffers(1, &SphereEBO);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, SphereEBO);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Indices), Indices, GL_DYNAMIC_DRAW);
+  
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3  * sizeof(real32), (void*)0);
+  glEnableVertexAttribArray(0);
+  
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+  glBindVertexArray(0);
   // NOTE(Jovan): Textures
   uint32 CubeTexture;
 
   CubeTexture = LoadTexture("../res/texture/container.jpg");
-
   
   // NOTE(Jovan): End of GL modeling and buffering
   // ---------------------------------------------
-
-
-  // NOTE(Jovan): End of coordinate systems
-  // --------------------------------------
 
   glEnable(GL_DEPTH_TEST);
 
@@ -481,12 +547,29 @@ int main()
   
   // NOTE(Jovan): Grab mouse
   SDL_SetRelativeMouseMode(SDL_TRUE);
+
+  sdl_sim_code Sim = SDLLoadSimCode("nans.so");
+
+  // NOTE(JOVAN): SPHERE
+  // -------------------
+
+
+  // NOTE(JOVAN): SPHERE END
+  // ----------------------
+
+  
+  // NOTE(Jovan): Renderer
   sdl_render Render = {};
   Render.Shaders[0] = CubeShaderProgram;
   Render.Textures[0] = CubeTexture;
   Render.VAOs[0] = CubeVAO;
-
-  sdl_sim_code Sim = SDLLoadSimCode("nans.so");
+  
+  Render.Shaders[1] = SphereShaderProgram;
+  Render.VAOs[1] = SphereVAO;
+  Render.VBOs[0] = SphereVBO;
+  Render.Indices = Indices;
+  Render.Num = ArrayCount(Indices);
+  
   while(Running)
     {
 
@@ -531,8 +614,6 @@ int main()
 	      Running = 0;
 	    }
 	}
-
-    
       
       // NOTE(Jovan): Work timing
       int64 WorkCounter = SDLGetWallClock();
@@ -554,12 +635,18 @@ int main()
 	  // TODO(Jovan): Missed frame rate???
 	}
       
-      glClearColor(0.8f, 0.0f, 0.8f, 1.0f);
+      glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       Sim.UpdateAndRender(&SimMemory, NewInput, &Render, dt);
-	
       glBindVertexArray(0);
 
+      // NOTE(Jovan): SPHERE
+      // -------------------
+
+      // NOTE(Jovan): END SPHERE
+      // -----------------------
+
+      
       // NOTE(Jovan): Swap buffers
       SDL_GL_SwapWindow(Window);
 
