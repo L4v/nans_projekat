@@ -24,9 +24,45 @@ UpdateCamera(sdl_state* State, sdl_input* Input)
     }
 }
 
+internal void
+Euler()
+{
+  // TODO(Jovan): Implement
+}
+
+internal void
+RotationFunction()
+{
+  // TODO(Jovan): Implement
+  // ubrzanje = 1/m (...);
+}
+
+internal void
+MovementFunction()
+{
+  // TODO(Jovan): Implement
+  // ubrzanje = 1/m (...);
+}
+
+internal void
+DetectCollisions(sdl_state* State, real32 dt)
+{
+  // TODO(Jovan): Implement
+}
+
+internal void
+ResolveCollision()
+{
+  // TODO(Jovan): Implement
+}
+
+
 extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 {
   sdl_state* SimState = (sdl_state*)Memory->PermanentStorage;
+
+  // NOTE(Jovan): Init
+  // -----------------
   if(!Memory->IsInitialized)
     {
 	  
@@ -49,13 +85,16 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 	  CubeIndex < 10;
 	  ++CubeIndex)
 	{
-	  SimState->Positions[CubeIndex] = glm::vec3(rand()%10,
+	  SimState->Cubes[CubeIndex].Position = glm::vec3(rand()%10,
 						     rand()%10 + 1.0,
 						     rand()%10);
 	  Row += (CubeIndex % 3 == 0);
-	}     
+	}
+      SimState->Cubes[0].Position = glm::vec3(0.0, 5.0, 0.0);
       Memory->IsInitialized = 1;
     }
+  // NOTE(Jovan): End init
+  // ---------------------
 
   // NOTE(Jovan): Coordinate systems
   // -------------------------------
@@ -68,10 +107,14 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   View = glm::translate(View, glm::vec3(0.0f, 0.0f, -3.0f));
   View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
 		     SimState->Camera.Up);
+
+  // NOTE(Jovan): End coordinate systems
+  // ------------------------------------
   
-  // NOTE(Jovan): Camera update
   UpdateCamera(SimState, Input);
-  
+
+  // NOTE(Jovan): Input
+  // ------------------
   real32 CameraSpeed = 0.05f;
   if(Input->KeyboardController.MoveForward.EndedDown)
     {
@@ -96,6 +139,19 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Position.y = 0.0;
     }
   
+  // NOTE(Jovan) End input
+  // ---------------------
+
+  // NOTE(Jovan): Physics stuff
+  // --------------------------
+  // TODO(Jovan): Implement
+  DetectCollisions(SimState, dt);
+  
+  ResolveCollision();
+
+  // NOTE(Jovan): End physics stuff
+  // ------------------------------
+  
   // TODO(Jovan): Maybe move to sdl_camera???
   glm::vec3 Front;
   Front.x = cos(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
@@ -104,7 +160,6 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SimState->Camera.Front = glm::normalize(Front);
   View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
 		     SimState->Camera.Up);
-
 
   // NOTE(Jovan): Floor drawing
   // --------------------------
@@ -146,7 +201,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       local_persist real32 Angle = 50.0f;
       //Angle += dt * 5.0f;
       Model = glm::mat4(1.0f);
-      Model = glm::translate(Model, SimState->Positions[CubeIndex]);
+      Model = glm::translate(Model, SimState->Cubes[CubeIndex].Position);
       Model = glm::rotate(Model, glm::radians((real32)(0 * (Angle + CubeIndex * 20.0))), glm::vec3(1.0f, 1.0f, 1.0f));
       Model = glm::scale(Model, glm::vec3(CubeSize, CubeSize, CubeSize));
       SetUniformM4(Render->Shaders[0], "Model", Model);
@@ -173,9 +228,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   real32 RotRad = 2.0f;
   Angle += dt * 100.0f;
   Theta += dt * 1.0f;
-  Theta = 0;
   Model = glm::mat4(1.0);
-  Model = glm::translate(Model, SimState->Positions[0] + glm::vec3(RotRad * sin(Theta), 0.0, RotRad * cos(Theta)));
+  Model = glm::translate(Model, SimState->Spheres[0].Position + glm::vec3(RotRad * sin(Theta), 0.0, RotRad * cos(Theta)));
   Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(0.0f, 1.0f, 0.0f));
   Model = glm::scale(Model, glm::vec3(SphereRadius, SphereRadius, SphereRadius));
   SetUniformM4(Render->Shaders[1], "Model", Model);
