@@ -43,13 +43,16 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
 	  
       // TODO(Jovan): Remove, only for testing
+      int32 Row = 0;
+      srand(time(0));
       for(int CubeIndex = 0;
 	  CubeIndex < 10;
 	  ++CubeIndex)
 	{
-	  SimState->Positions[CubeIndex] = glm::vec3(0.5*CubeIndex,
-						     1.0*CubeIndex,
-						     1.5*CubeIndex);
+	  SimState->Positions[CubeIndex] = glm::vec3(rand()%10,
+						     rand()%10 + 1.0,
+						     rand()%10);
+	  Row += (CubeIndex % 3 == 0);
 	}     
       Memory->IsInitialized = 1;
     }
@@ -87,6 +90,12 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Position += glm::normalize(glm::cross(SimState->Camera.Front, SimState->Camera.Up)) * CameraSpeed;
     }
 
+  // TODO(Add normal constraint)
+  if(SimState->Camera.Position.y < 0)
+    {
+      SimState->Camera.Position.y = 0.0;
+    }
+  
   // TODO(Jovan): Maybe move to sdl_camera???
   glm::vec3 Front;
   Front.x = cos(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
@@ -95,6 +104,29 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SimState->Camera.Front = glm::normalize(Front);
   View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
 		     SimState->Camera.Up);
+
+
+  // NOTE(Jovan): Floor drawing
+  // --------------------------
+
+  glUseProgram(Render->Shaders[0]);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, Render->Textures[2]);
+  SetUniformM4(Render->Shaders[0], "View", View);
+  SetUniformM4(Render->Shaders[0], "Projection", Projection);
+  real32 FloorSize = 1;
+  Model = glm::mat4(1.0);
+  Model = glm::translate(Model, glm::vec3(0.0, 0.0, 0.0));
+  Model = glm::scale(Model, glm::vec3(FloorSize, 0, FloorSize));
+  SetUniformM4(Render->Shaders[0], "Model", Model);
+  glBindVertexArray(Render->VAOs[2]);
+  glDrawArrays(GL_TRIANGLES, 0, 6);
+  glBindVertexArray(0);
+			 
+  // NOTE(Jovan): End floor drawing
+  // ------------------------------
+  SetUniformM4(Render->Shaders[0], "View", View);
+  SetUniformM4(Render->Shaders[0], "Projection", Projection);
   
   // NOTE(Jovan): Cube drawing
   // -------------------------
@@ -112,10 +144,10 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       int32 CubeSize = 1.0f;
       // TODO(Jovan): Remove local persist, use game state
       local_persist real32 Angle = 50.0f;
-      Angle += dt * 5.0f;
+      //Angle += dt * 5.0f;
       Model = glm::mat4(1.0f);
       Model = glm::translate(Model, SimState->Positions[CubeIndex]);
-      Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(1.0f, 1.0f, 1.0f));
+      Model = glm::rotate(Model, glm::radians((real32)(0 * (Angle + CubeIndex * 20.0))), glm::vec3(1.0f, 1.0f, 1.0f));
       Model = glm::scale(Model, glm::vec3(CubeSize, CubeSize, CubeSize));
       SetUniformM4(Render->Shaders[0], "Model", Model);
       glBindVertexArray(Render->VAOs[0]);
@@ -135,22 +167,21 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   glBindTexture(GL_TEXTURE_2D, Render->Textures[1]);
   SetUniformM4(Render->Shaders[1], "View", View);
   SetUniformM4(Render->Shaders[1], "Projection", Projection);
-  for(uint32 SphereIndex = 0;
-      SphereIndex < 10;
-      ++SphereIndex)
-    {
-      real32 SphereRadius = 0.5f;
-      local_persist real32 Angle = 50.0f;
-      Angle += dt * 5.0f;
-      Model = glm::mat4(1.0);
-      Model = glm::translate(Model, SimState->Positions[SphereIndex] + glm::vec3(0, 1.5, 0));
-      Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(1.0f, 1.0f, 1.0f));
-      Model = glm::scale(Model, glm::vec3(SphereRadius, SphereRadius, SphereRadius));
-      SetUniformM4(Render->Shaders[1], "Model", Model);
-      glBindVertexArray(Render->VAOs[1]);
-      glDrawElements(GL_TRIANGLES, Render->Num,  GL_UNSIGNED_INT, Render->Indices);
-      glBindVertexArray(0);
-    }
+  real32 SphereRadius = 0.5f;
+  local_persist real32 Angle = 50.0f;
+  local_persist real32 Theta = 0.0f;
+  real32 RotRad = 2.0f;
+  Angle += dt * 100.0f;
+  Theta += dt * 1.0f;
+  Theta = 0;
+  Model = glm::mat4(1.0);
+  Model = glm::translate(Model, SimState->Positions[0] + glm::vec3(RotRad * sin(Theta), 0.0, RotRad * cos(Theta)));
+  Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(0.0f, 1.0f, 0.0f));
+  Model = glm::scale(Model, glm::vec3(SphereRadius, SphereRadius, SphereRadius));
+  SetUniformM4(Render->Shaders[1], "Model", Model);
+  glBindVertexArray(Render->VAOs[1]);
+  glDrawElements(GL_TRIANGLES, Render->Num,  GL_UNSIGNED_INT, Render->Indices);
+  glBindVertexArray(0);
 #endif
       
   // NOTE(Jovan): End sphere drawing

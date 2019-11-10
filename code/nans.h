@@ -8,6 +8,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <cstdio>
 #include <vector>
+#include <time.h>
 
 #define internal static
 #define global_variable static
@@ -91,8 +92,8 @@ struct sdl_input
 struct sdl_render
 {
   uint32 Shaders[2];
-  uint32 Textures[2];
-  uint32 VAOs[2];
+  uint32 Textures[3];
+  uint32 VAOs[3];
   uint32 VBOs[1];
   uint32 EBOs[1];
   uint32* Indices;

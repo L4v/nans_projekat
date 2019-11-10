@@ -111,7 +111,7 @@ SDLWindowResize(int32 Width, int32 Height)
 }
 
 internal bool32
-SDLHandleEvent(SDL_Event* Event, sdl_input* Input) 
+SDLHandleEvent(SDL_Event* Event, sdl_input* Input, bool32* InFocus) 
 {
   bool32 ShouldQuit = 0;
   switch(Event->type)
@@ -131,14 +131,31 @@ SDLHandleEvent(SDL_Event* Event, sdl_input* Input)
 	    {
 	      SDLWindowResize(Event->window.data1, Event->window.data2);
 	    }break;
+
+	  case SDL_WINDOWEVENT_FOCUS_LOST:
+	    {
+	      *InFocus = 0;
+	      printf("Lost focus, %d\n", *InFocus);
+	      SDL_SetRelativeMouseMode(SDL_FALSE);
+	    }break;
+
+	  case SDL_WINDOWEVENT_TAKE_FOCUS:
+	    {
+	      *InFocus = 1;
+	      printf("Gained focus, %d\n", *InFocus);
+	      SDL_SetRelativeMouseMode(SDL_TRUE);
+	    }break;
 	  }
       }break;
     case SDL_MOUSEMOTION:
       {
-	Input->MouseController.X = Event->motion.x;
-	Input->MouseController.Y = Event->motion.y;
-	Input->MouseController.XRel = Event->motion.xrel;
-	Input->MouseController.YRel = Event->motion.yrel;
+	if(*InFocus == 1)
+	  {
+	    Input->MouseController.X = Event->motion.x;
+	    Input->MouseController.Y = Event->motion.y;
+	    Input->MouseController.XRel = Event->motion.xrel;
+	    Input->MouseController.YRel = Event->motion.yrel;
+	  }
       }break;
 
       // NOTE(Jovan): Keyboard events
@@ -352,7 +369,7 @@ int main()
   parse_file_into_str("../shaders/sphere.vs", SphereVSSource, 256 * 1024);
   parse_file_into_str("../shaders/sphere.fs", SphereFSSource, 256 * 1024);
 
-  real32 RectVertices[] = {
+  real32 CubeVertices[] = {
 			   // X  |  Y   |  Z  | Tex coords
 			   -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
 			   0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
@@ -401,14 +418,26 @@ int main()
 			  0, 1, 3,
 			  0, 2, 3
   };
+  
+  real32 FloorVertices[] = {
+			   // X |   Y   |  Z  |  TexX | TexY
+			   50.0f, -0.5f,  50.0f,  2.0f, 0.0f, 
+			   -50.0f, -0.5f,  50.0f,  0.0f, 0.0f,
+			   -50.0f, -0.5f, -50.0f,  0.0f, 2.0f,
 
+			   50.0f, -0.5f,  50.0f,  2.0f, 0.0f, 
+			   -50.0f, -0.5f, -50.0f,  0.0f, 2.0f,
+			   50.0f, -0.5f, -50.0f,  2.0f, 2.0f	
+  };
+
+  
   uint32 Stacks = 20;
   uint32 Slices = 20;
   
-  //  real32 Vertices[(Stacks + 1) * (Slices + 1) * 3];
+  //  real32 SphereVertices[(Stacks + 1) * (Slices + 1) * 3];
   // TODO(Jovan): Sphere texture
-  real32 Vertices[(Stacks + 1) * (Slices + 1) * 5];
-  uint32 Indices[(Slices * Stacks + Slices) * 6];
+  real32 SphereVertices[(Stacks + 1) * (Slices + 1) * 5];
+  uint32 SphereIndices[(Slices * Stacks + Slices) * 6];
 
   int32 Index = 0;
   for(uint32 i = 0; i <= Stacks; i++)
@@ -425,24 +454,24 @@ int main()
 	  real32 y = cos(Phi);
 	  real32 z = sin(Theta) * sin(Phi);
 
-	  Vertices[Index++] = x;
-	  Vertices[Index++] = y;
-	  Vertices[Index++] = z;
+	  SphereVertices[Index++] = x;
+	  SphereVertices[Index++] = y;
+	  SphereVertices[Index++] = z;
 	  // // TODO(Jovan): Texture sphere
-	  Vertices[Index++] = (real32)j / (real32)Slices;
-	  Vertices[Index++] = (real32)i / (real32)Stacks;
+	  SphereVertices[Index++] = (real32)j / (real32)Slices;
+	  SphereVertices[Index++] = (real32)i / (real32)Stacks;
 	}
     }
   Index = 0;
   for(uint32 i = 0; i < Slices * Stacks + Slices; i++)
     {
-      Indices[Index++] = i;
-      Indices[Index++] = i + Slices + 1;
-      Indices[Index++] = i + Slices;
+      SphereIndices[Index++] = i;
+      SphereIndices[Index++] = i + Slices + 1;
+      SphereIndices[Index++] = i + Slices;
 
-      Indices[Index++] = i + Slices + 1;
-      Indices[Index++] = i;
-      Indices[Index++] = i + 1;
+      SphereIndices[Index++] = i + Slices + 1;
+      SphereIndices[Index++] = i;
+      SphereIndices[Index++] = i + 1;
     }
   
   // NOTE(Jovan): Creating shaders and shader programs
@@ -497,9 +526,28 @@ int main()
   glDeleteShader(SphereFS);
   
   // NOTE(Jovan): VAO, EBO, VBO
+  // TODO(Jovan): Gen arrays inside Render directly
   uint32 CubeVAO, CubeVBO, CubeEBO,
-    SphereVAO, SphereVBO, SphereEBO;
+    SphereVAO, SphereVBO, SphereEBO,
+    FloorVAO, FloorVBO;
 
+  // NOTE(Jovan): Floor data
+  glGenVertexArrays(1, &FloorVAO);
+  glBindVertexArray(FloorVAO);
+  glGenBuffers(1, &FloorVBO);
+  
+  glBindBuffer(GL_ARRAY_BUFFER, FloorVBO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(FloorVertices), FloorVertices,
+	       GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
+			(void*)(0));
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
+			(void*)(3 * sizeof(real32)));
+  glEnableVertexAttribArray(1);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+  glBindVertexArray(0);
+  
   // NOTE(Jovan): Cube data
   glGenVertexArrays(1, &CubeVAO);
   glBindVertexArray(CubeVAO);
@@ -507,7 +555,7 @@ int main()
   glGenBuffers(1, &CubeEBO);
 
   glBindBuffer(GL_ARRAY_BUFFER, CubeVBO);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(RectVertices), RectVertices,
+  glBufferData(GL_ARRAY_BUFFER, sizeof(CubeVertices), CubeVertices,
 	       GL_DYNAMIC_DRAW);
   
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, CubeEBO);
@@ -521,6 +569,7 @@ int main()
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
 			(void*) (3 * sizeof(real32)));
   glEnableVertexAttribArray(1);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
 
   // NOTE(Jovan): Sphere data
@@ -529,11 +578,11 @@ int main()
   
   glGenBuffers(1, &SphereVBO);
   glBindBuffer(GL_ARRAY_BUFFER, SphereVBO);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(SphereVertices), SphereVertices, GL_DYNAMIC_DRAW);
 
   glGenBuffers(1, &SphereEBO);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, SphereEBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Indices), Indices, GL_DYNAMIC_DRAW);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(SphereIndices), SphereIndices, GL_DYNAMIC_DRAW);
   
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5  * sizeof(real32),
 			(void*)0);
@@ -546,10 +595,11 @@ int main()
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
   // NOTE(Jovan): Textures
-  uint32 CubeTexture, SphereTexture;
+  uint32 CubeTexture, SphereTexture, FloorTexture;
 
   CubeTexture = LoadTexture("../res/texture/container.jpg");
   SphereTexture = LoadTexture("../res/texture/earth.jpg");
+  FloorTexture = LoadTexture("../res/texture/checkerboard.png");
   
   // NOTE(Jovan): End of GL modeling and buffering
   // ---------------------------------------------
@@ -568,6 +618,7 @@ int main()
   
   // NOTE(Jovan): Grab mouse
   SDL_SetRelativeMouseMode(SDL_TRUE);
+  bool32 InFocus = 1;
 
   sdl_sim_code Sim = SDLLoadSimCode("nans.so");
   
@@ -581,8 +632,11 @@ int main()
   Render.Textures[1] = SphereTexture;
   Render.VAOs[1] = SphereVAO;
   Render.VBOs[0] = SphereVBO;
-  Render.Indices = Indices;
-  Render.Num = ArrayCount(Indices);
+  Render.Indices = SphereIndices;
+  Render.Num = ArrayCount(SphereIndices);
+
+  Render.Textures[2] = FloorTexture;
+  Render.VAOs[2] = FloorVAO;
   
   while(Running)
     {
@@ -623,7 +677,7 @@ int main()
       while(SDL_PollEvent(&Event))
 	{
 	  // NOTE(Jovan): Check for exit
-	  if(SDLHandleEvent(&Event, NewInput))
+	  if(SDLHandleEvent(&Event, NewInput, &InFocus))
 	    {
 	      Running = 0;
 	    }
