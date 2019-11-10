@@ -16,35 +16,12 @@
 #include "sdl_nans.h"
 
 global_variable uint64 GlobalPerfCountFrequency;
-
-internal const char*
-LoadShader(const char* Path)
-{
-  char* shaderText = 0;
-  int64 length;
-
-  FILE* file = fopen(Path, "rb");
-  
-  if(file)
-    {
-      fseek(file, 0, SEEK_END);
-      length = ftell(file);
-      fseek(file, 0, SEEK_SET);
-      shaderText = (char*)malloc(length);
-      if(shaderText)
-	{
-	  fread(shaderText, 1, length, file);
-	}
-      fclose(file);
-    }
-  return shaderText;
-}
   
 internal uint32
 LoadTexture(char* Path)
 {
   int32 Width, Height, NChannels;
-  uint8* Data = stbi_load("../res/texture/container.jpg", &Width, &Height, &NChannels, 0);
+  uint8* Data = stbi_load(Path, &Width, &Height, &NChannels, 0);
   GLenum Format;
   uint32 TextureID;
   glGenTextures(1, &TextureID);
@@ -279,6 +256,26 @@ SDLUnloadSimCode(sdl_sim_code* SimCode)
   SimCode->UpdateAndRender = SimUpdateAndRenderStub;
 }
 
+
+void parse_file_into_str( const char *file_name, char *shader_str, int max_len ) {
+  FILE *file = fopen( file_name, "r" );
+  if ( !file ) {
+    printf( "ERROR: opening file for reading: %s\n", file_name );
+    return;
+  }
+  size_t cnt = fread( shader_str, 1, max_len - 1, file );
+  if ( (int)cnt >= max_len - 1 ) {
+    printf( "WARNING: file %s too big - truncated.\n", file_name );
+  }
+  if ( ferror( file ) ) {
+    printf( "ERROR: reading shader file %s\n", file_name );
+    fclose( file );
+    return;
+  }
+  shader_str[cnt] = 0;
+  fclose( file );
+}
+
 int main()
 {
 
@@ -344,11 +341,16 @@ int main()
 
   // NOTE(Jovan): GL modeling and buffering
   // --------------------------------------
-  
-  const char* CubeFragmentShaderSource = LoadShader("../shaders/cube.fs");
-  const char* CubeVertexShaderSource = LoadShader("../shaders/cube.vs");
-  const char* SphereVSSource = LoadShader("../shaders/sphere.vs");
-  const char* SphereFSSource = LoadShader("../shaders/sphere.fs");
+
+  // TODO(Jovan): To transient storage
+  char SphereVSSource[256 * 1024];
+  char SphereFSSource[256 * 1024];
+  char CubeVSSource[256 * 1024];
+  char CubeFSSource[256 * 1024];
+  parse_file_into_str("../shaders/cube.vs", CubeVSSource, 256 * 1024);
+  parse_file_into_str("../shaders/cube.fs", CubeFSSource, 256 * 1024);
+  parse_file_into_str("../shaders/sphere.vs", SphereVSSource, 256 * 1024);
+  parse_file_into_str("../shaders/sphere.fs", SphereFSSource, 256 * 1024);
 
   real32 RectVertices[] = {
 			   // X  |  Y   |  Z  | Tex coords
@@ -400,19 +402,21 @@ int main()
 			  0, 2, 3
   };
 
-  int32 Stacks = 20;
-  int32 Slices = 20;
+  uint32 Stacks = 20;
+  uint32 Slices = 20;
   
-  real32 Vertices[(Stacks + 1) * (Slices + 1) * 3];
+  //  real32 Vertices[(Stacks + 1) * (Slices + 1) * 3];
+  // TODO(Jovan): Sphere texture
+  real32 Vertices[(Stacks + 1) * (Slices + 1) * 5];
   uint32 Indices[(Slices * Stacks + Slices) * 6];
 
   int32 Index = 0;
-  for(int i = 0; i <= Stacks; i++)
+  for(uint32 i = 0; i <= Stacks; i++)
     {
       real32 V = (real32)i / (real32)Stacks;
       real32 Phi = V * Pi32;
       
-      for(int j = 0; j <= Slices; j++)
+      for(uint32 j = 0; j <= Slices; j++)
 	{
 	  real32 U = (real32)j / (real32)Slices;
 	  real32 Theta = U * (Pi32 * 2);
@@ -424,10 +428,13 @@ int main()
 	  Vertices[Index++] = x;
 	  Vertices[Index++] = y;
 	  Vertices[Index++] = z;
+	  // // TODO(Jovan): Texture sphere
+	  Vertices[Index++] = (real32)j / (real32)Slices;
+	  Vertices[Index++] = (real32)i / (real32)Stacks;
 	}
     }
   Index = 0;
-  for(int32 i = 0; i < Slices * Stacks + Slices; i++)
+  for(uint32 i = 0; i < Slices * Stacks + Slices; i++)
     {
       Indices[Index++] = i;
       Indices[Index++] = i + Slices + 1;
@@ -441,43 +448,51 @@ int main()
   // NOTE(Jovan): Creating shaders and shader programs
   uint32 CubeVertexShader, CubeFragmentShader,
     SphereVS, SphereFS;
-  
+  uint32 CubeShaderProgram, SphereShaderProgram;
+
+  // NOTE(Jovan): Cube shaders
   CubeVertexShader = glCreateShader(GL_VERTEX_SHADER);
   CubeFragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+  const GLchar* p;
+  p = (const GLchar*)CubeVSSource;
+  glShaderSource(CubeVertexShader, 1, &p, 0);
+  p = (const GLchar*)CubeFSSource;
+  glShaderSource(CubeFragmentShader, 1, &p, 0);
+  
+  glCompileShader(CubeVertexShader);
+  CheckShaderCompilation(CubeVertexShader, Vertex);
+  
+  glCompileShader(CubeFragmentShader);
+  CheckShaderCompilation(CubeVertexShader, Fragment);
+  
+  CubeShaderProgram = glCreateProgram();
+  glAttachShader(CubeShaderProgram, CubeVertexShader);
+  glAttachShader(CubeShaderProgram, CubeFragmentShader);
+  glLinkProgram(CubeShaderProgram);
+  CheckShaderLink(CubeShaderProgram);
+  glDeleteShader(CubeVertexShader);
+  glDeleteShader(CubeFragmentShader);
+
+  // NOTE(Jovan): Sphere shaders
   SphereVS  = glCreateShader(GL_VERTEX_SHADER);
   SphereFS = glCreateShader(GL_FRAGMENT_SHADER);
-
-  glShaderSource(CubeVertexShader, 1, &CubeVertexShaderSource, 0);
-  glShaderSource(CubeFragmentShader, 1, &CubeFragmentShaderSource, 0);
-  glShaderSource(SphereVS, 1, &SphereVSSource, 0);
-  glShaderSource(SphereFS, 1, &SphereFSSource, 0);
+  p = (const GLchar*)SphereVSSource;
+  glShaderSource(SphereVS, 1, &p, 0);
+  p = (const GLchar*)SphereFSSource;
+  glShaderSource(SphereFS, 1, &p, 0);
+  
   glCompileShader(SphereVS);
   CheckShaderCompilation(SphereVS, Vertex);
+  
   glCompileShader(SphereFS);
   CheckShaderCompilation(SphereFS, Fragment);
 
-  glCompileShader(CubeVertexShader);
-  CheckShaderCompilation(CubeVertexShader, Vertex);
-  glCompileShader(CubeFragmentShader);
-  CheckShaderCompilation(CubeVertexShader, Fragment);
 
-  uint32 CubeShaderProgram, SphereShaderProgram;
-  CubeShaderProgram = glCreateProgram();
   SphereShaderProgram = glCreateProgram();
-  
-  glAttachShader(CubeShaderProgram, CubeVertexShader);
-  glAttachShader(CubeShaderProgram, CubeFragmentShader);
   glAttachShader(SphereShaderProgram, SphereVS);
   glAttachShader(SphereShaderProgram, SphereFS);
-  
-  glLinkProgram(CubeShaderProgram);
-  CheckShaderLink(CubeShaderProgram);
-  
   glLinkProgram(SphereShaderProgram);
   CheckShaderLink(SphereShaderProgram);
-
-  glDeleteShader(CubeVertexShader);
-  glDeleteShader(CubeFragmentShader);
   glDeleteShader(SphereVS);
   glDeleteShader(SphereFS);
   
@@ -520,15 +535,21 @@ int main()
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, SphereEBO);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Indices), Indices, GL_DYNAMIC_DRAW);
   
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3  * sizeof(real32), (void*)0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5  * sizeof(real32),
+			(void*)0);
   glEnableVertexAttribArray(0);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
+  			(void*) (3 * sizeof(real32)));
+   glEnableVertexAttribArray(1);
+			
   
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
   // NOTE(Jovan): Textures
-  uint32 CubeTexture;
+  uint32 CubeTexture, SphereTexture;
 
   CubeTexture = LoadTexture("../res/texture/container.jpg");
+  SphereTexture = LoadTexture("../res/texture/earth.jpg");
   
   // NOTE(Jovan): End of GL modeling and buffering
   // ---------------------------------------------
@@ -549,22 +570,15 @@ int main()
   SDL_SetRelativeMouseMode(SDL_TRUE);
 
   sdl_sim_code Sim = SDLLoadSimCode("nans.so");
-
-  // NOTE(JOVAN): SPHERE
-  // -------------------
-
-
-  // NOTE(JOVAN): SPHERE END
-  // ----------------------
-
   
   // NOTE(Jovan): Renderer
   sdl_render Render = {};
   Render.Shaders[0] = CubeShaderProgram;
   Render.Textures[0] = CubeTexture;
   Render.VAOs[0] = CubeVAO;
-  
+
   Render.Shaders[1] = SphereShaderProgram;
+  Render.Textures[1] = SphereTexture;
   Render.VAOs[1] = SphereVAO;
   Render.VBOs[0] = SphereVBO;
   Render.Indices = Indices;

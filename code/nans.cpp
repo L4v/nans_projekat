@@ -99,11 +99,12 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // NOTE(Jovan): Cube drawing
   // -------------------------
   glUseProgram(Render->Shaders[0]);
+  glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, Render->Textures[0]);
 
   SetUniformM4(Render->Shaders[0], "View", View);
   SetUniformM4(Render->Shaders[0], "Projection", Projection);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+#if 1
   for(int CubeIndex = 0;
       CubeIndex < 10;
       ++CubeIndex)
@@ -111,7 +112,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       int32 CubeSize = 1.0f;
       // TODO(Jovan): Remove local persist, use game state
       local_persist real32 Angle = 50.0f;
-      Angle += dt * +5.0f;
+      Angle += dt * 5.0f;
       Model = glm::mat4(1.0f);
       Model = glm::translate(Model, SimState->Positions[CubeIndex]);
       Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(1.0f, 1.0f, 1.0f));
@@ -120,24 +121,29 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       glBindVertexArray(Render->VAOs[0]);
       glDrawArrays(GL_TRIANGLES, 0, 36);
     }
+#endif
+  glBindTexture(GL_TEXTURE_2D, 0);
   glBindVertexArray(0);
   // NOTE(Jovan): End cube drawing
   // -----------------------------
 
   // NOTE(Jovan): Sphere drawing
   // ---------------------------
+#if 1
   glUseProgram(Render->Shaders[1]);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, Render->Textures[1]);
   SetUniformM4(Render->Shaders[1], "View", View);
   SetUniformM4(Render->Shaders[1], "Projection", Projection);
   for(uint32 SphereIndex = 0;
       SphereIndex < 10;
       ++SphereIndex)
     {
-      real32 SphereRadius = 0.2f;
+      real32 SphereRadius = 0.5f;
       local_persist real32 Angle = 50.0f;
       Angle += dt * 5.0f;
       Model = glm::mat4(1.0);
-      Model = glm::translate(Model, SimState->Positions[SphereIndex] + glm::vec3(0, 5.0, 0));
+      Model = glm::translate(Model, SimState->Positions[SphereIndex] + glm::vec3(0, 1.5, 0));
       Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(1.0f, 1.0f, 1.0f));
       Model = glm::scale(Model, glm::vec3(SphereRadius, SphereRadius, SphereRadius));
       SetUniformM4(Render->Shaders[1], "Model", Model);
@@ -145,6 +151,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       glDrawElements(GL_TRIANGLES, Render->Num,  GL_UNSIGNED_INT, Render->Indices);
       glBindVertexArray(0);
     }
+#endif
       
   // NOTE(Jovan): End sphere drawing
   // -------------------------------
