@@ -1,5 +1,4 @@
 #include "nans.h"
-#define Pi32 3.14159265359f
 internal void
 SetUniformM4(uint32 ID, char* Uniform, const glm::mat4 &Mat4)
 {
@@ -24,10 +23,24 @@ UpdateCamera(sdl_state* State, sdl_input* Input)
     }
 }
 
-internal void
-Euler()
+internal phys_return
+Euler(phys_return (*F)(glm::vec3, glm::vec3, real32), real32 dt,
+      phys_return Y0, glm::vec3 SummedForce, real32 Mass)
 {
-  // TODO(Jovan): Implement
+  phys_return Result = {};
+  phys_return Tmp = F(Y0.Y, SummedForce, Mass);
+  Result.X = Y0.X + dt * Tmp.X;
+  Result.Y = Y0.Y + dt* Tmp.Y;
+  return Result;
+}
+
+internal phys_return
+MovementFunction(glm::vec3 Velocity, glm::vec3 SummedForces, real32 Mass)
+{
+  phys_return Result = {};
+  Result.X = Velocity;
+  Result.Y = (real32)(1.0 / Mass) * (SummedForces - GLOBAL_FRICTION * Velocity);
+  return Result;
 }
 
 internal void
@@ -38,11 +51,16 @@ RotationFunction()
 }
 
 internal void
-MovementFunction()
+CubeAddForce(sdl_state* State, int32 CubeIndex, glm::vec3 Force)
 {
-  // TODO(Jovan): Implement
-  // ubrzanje = 1/m (...);
-}
+  State->Cubes[CubeIndex].Forces += Force;
+};
+
+internal void
+CubeClearForces(sdl_state* State, int32 CubeIndex)
+{
+  State->Cubes[CubeIndex].Forces = glm::vec3(0.0);
+};
 
 internal void
 DetectCollisions(sdl_state* State, real32 dt)
@@ -65,7 +83,10 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // -----------------
   if(!Memory->IsInitialized)
     {
-	  
+
+      // NOTE(Jovan): Init random seed
+      srand(time(0));
+      
       // NOTE(Jovan): Camera init
       SimState->Camera.FOV = 45.0f; 
       SimState->Camera.Pitch = 0.0f;
@@ -77,20 +98,31 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Front = glm::vec3(0.0f, 0.0f, -1.0f);
       SimState->Camera.Right = glm::normalize(glm::cross(Up, SimState->Camera.Direction));
       SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
-	  
-      // TODO(Jovan): Remove, only for testing
-      int32 Row = 0;
-      srand(time(0));
-      for(int CubeIndex = 0;
-	  CubeIndex < 10;
-	  ++CubeIndex)
-	{
-	  SimState->Cubes[CubeIndex].Position = glm::vec3(rand()%10,
-						     rand()%10 + 1.0,
-						     rand()%10);
-	  Row += (CubeIndex % 3 == 0);
-	}
-      SimState->Cubes[0].Position = glm::vec3(0.0, 5.0, 0.0);
+      
+      // NOTE(Jovan): Cube init
+      SimState->CubeCount = 1;
+      SimState->Cubes[0].Position = glm::vec3(0.0,
+					      2.0,
+					      0.0);
+      SimState->Cubes[0].Velocity = glm::vec3(0.0);
+      SimState->Cubes[0].Forces = glm::vec3(0.0);
+      SimState->Cubes[0].XAngle = 0.0f;
+      SimState->Cubes[0].YAngle = 0.0f;
+      SimState->Cubes[0].ZAngle = 0.0f;
+      SimState->Cubes[0].Size = 1.0f;
+      SimState->Cubes[0].Mass = 10.0f;
+
+      // NOTE(Jovan): Sphere init
+      SimState->SphereCount = 1;
+      SimState->Spheres[0].Position = glm::vec3(2.0,
+						2.0,
+						0.0);
+      SimState->Spheres[0].XAngle = 0.0f;
+      SimState->Spheres[0].YAngle = 0.0f;
+      SimState->Spheres[0].ZAngle = 0.0f;
+      SimState->Spheres[0].Radius = 0.5f;
+
+      
       Memory->IsInitialized = 1;
     }
   // NOTE(Jovan): End init
@@ -132,11 +164,15 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     {
       SimState->Camera.Position += glm::normalize(glm::cross(SimState->Camera.Front, SimState->Camera.Up)) * CameraSpeed;
     }
+  if(Input->KeyboardController.ShootAction.EndedDown)
+    {
+      CubeAddForce(SimState, 0, 20.0f * SimState->Camera.Front);
+    }
 
   // TODO(Add normal constraint)
-  if(SimState->Camera.Position.y < 0)
+  if(SimState->Camera.Position.y < 0.5)
     {
-      SimState->Camera.Position.y = 0.0;
+      SimState->Camera.Position.y = 0.5;
     }
   
   // NOTE(Jovan) End input
@@ -146,8 +182,16 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // --------------------------
   // TODO(Jovan): Implement
   DetectCollisions(SimState, dt);
-  
   ResolveCollision();
+
+  phys_return Y0 = {};
+  phys_return Y = {};
+  Y0.X = SimState->Cubes[0].Position;
+  Y0.Y = SimState->Cubes[0].Velocity;
+  Y = Euler(MovementFunction, dt, Y0, SimState->Cubes[0].Forces, SimState->Cubes[0].Mass);
+  SimState->Cubes[0].Position = Y.X;
+  SimState->Cubes[0].Velocity = Y.Y;
+  CubeClearForces(SimState, 0);
 
   // NOTE(Jovan): End physics stuff
   // ------------------------------
@@ -192,18 +236,18 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SetUniformM4(Render->Shaders[0], "View", View);
   SetUniformM4(Render->Shaders[0], "Projection", Projection);
 #if 1
-  for(int CubeIndex = 0;
-      CubeIndex < 10;
+  for(uint32 CubeIndex = 0;
+      CubeIndex < SimState->CubeCount;
       ++CubeIndex)
     {
-      int32 CubeSize = 1.0f;
-      // TODO(Jovan): Remove local persist, use game state
-      local_persist real32 Angle = 50.0f;
-      //Angle += dt * 5.0f;
       Model = glm::mat4(1.0f);
       Model = glm::translate(Model, SimState->Cubes[CubeIndex].Position);
-      Model = glm::rotate(Model, glm::radians((real32)(0 * (Angle + CubeIndex * 20.0))), glm::vec3(1.0f, 1.0f, 1.0f));
-      Model = glm::scale(Model, glm::vec3(CubeSize, CubeSize, CubeSize));
+      Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].XAngle), glm::vec3(1.0f, 0.0f, 0.0f));
+      Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].YAngle), glm::vec3(0.0f, 1.0f, 0.0f));
+      Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].ZAngle), glm::vec3(0.0f, 0.0f, 1.0f));
+      Model = glm::scale(Model, glm::vec3(SimState->Cubes[CubeIndex].Size,
+					  SimState->Cubes[CubeIndex].Size,
+					  SimState->Cubes[CubeIndex].Size));
       SetUniformM4(Render->Shaders[0], "Model", Model);
       glBindVertexArray(Render->VAOs[0]);
       glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -222,19 +266,25 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   glBindTexture(GL_TEXTURE_2D, Render->Textures[1]);
   SetUniformM4(Render->Shaders[1], "View", View);
   SetUniformM4(Render->Shaders[1], "Projection", Projection);
-  real32 SphereRadius = 0.5f;
-  local_persist real32 Angle = 50.0f;
-  local_persist real32 Theta = 0.0f;
-  real32 RotRad = 2.0f;
-  Angle += dt * 100.0f;
-  Theta += dt * 1.0f;
-  Model = glm::mat4(1.0);
-  Model = glm::translate(Model, SimState->Spheres[0].Position + glm::vec3(RotRad * sin(Theta), 0.0, RotRad * cos(Theta)));
-  Model = glm::rotate(Model, glm::radians(Angle), glm::vec3(0.0f, 1.0f, 0.0f));
-  Model = glm::scale(Model, glm::vec3(SphereRadius, SphereRadius, SphereRadius));
-  SetUniformM4(Render->Shaders[1], "Model", Model);
-  glBindVertexArray(Render->VAOs[1]);
-  glDrawElements(GL_TRIANGLES, Render->Num,  GL_UNSIGNED_INT, Render->Indices);
+  for(uint32 SphereIndex = 0;
+      SphereIndex < SimState->SphereCount;
+      ++SphereIndex)
+    {
+      Model = glm::mat4(1.0);
+      Model = glm::translate(Model, SimState->Spheres[SphereIndex].Position);
+      Model = glm::rotate(Model, glm::radians(SimState->Spheres[SphereIndex].XAngle),
+			  glm::vec3(1.0f, 0.0f, 0.0f));
+      Model = glm::rotate(Model, glm::radians(SimState->Spheres[SphereIndex].YAngle),
+			  glm::vec3(0.0f, 1.0f, 0.0f));
+      Model = glm::rotate(Model, glm::radians(SimState->Spheres[SphereIndex].ZAngle),
+			  glm::vec3(0.0f, 0.0f, 1.0f));
+      Model = glm::scale(Model, glm::vec3(SimState->Spheres[SphereIndex].Radius,
+					  SimState->Spheres[SphereIndex].Radius,
+					  SimState->Spheres[SphereIndex].Radius));
+      SetUniformM4(Render->Shaders[1], "Model", Model);
+      glBindVertexArray(Render->VAOs[1]);
+      glDrawElements(GL_TRIANGLES, Render->Num,  GL_UNSIGNED_INT, Render->Indices);
+    }
   glBindVertexArray(0);
 #endif
       

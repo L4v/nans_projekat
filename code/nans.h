@@ -39,10 +39,13 @@ typedef double real64;
 #define Pi32 3.14159265359f
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
+#define GRAVITY_VELOCITY  9.81f
+#define GLOBAL_FRICTION  10.0f
 
 #define DEFAULT_WINDOW_WIDTH 1024
 #define DEFAULT_WINDOW_HEIGHT 768
-#define MAX_CUBE_COUNT 64
+#define MAX_CUBE_COUNT 16
+#define MAX_SPHERE_COUNT 16
 
 
 #if SLOW_BUILD
@@ -128,22 +131,40 @@ struct sdl_camera
 struct cube
 {
   glm::vec3 Position;
+  glm::vec3 Velocity;
+  glm::vec3 Forces;
   real32 Size;
-  real32 Angle;
+  real32 Mass;
+  real32 XAngle;
+  real32 YAngle;
+  real32 ZAngle;
 };
 
 struct sphere
 {
   glm::vec3 Position;
   real32 Radius;
-  real32 Angle;
+  real32 XAngle;
+  real32 YAngle;
+  real32 ZAngle;
 };
 
 struct sdl_state
 {
-  cube Cubes[10];
-  sphere Spheres[10];
+  cube Cubes[MAX_SPHERE_COUNT];
+  sphere Spheres[MAX_SPHERE_COUNT];
   sdl_camera Camera;
+  uint32 CubeCount;
+  uint32 SphereCount;
+};
+
+
+// NOTE(Jovan): Return value for ODEs and physics functions
+// TODO(Jovan): Maybe use other method?
+struct phys_return
+{
+  glm::vec3 X;
+  glm::vec3 Y;
 };
 
 #define SIM_UPDATE_AND_RENDER(name) void name(memory* Memory, sdl_input* Input, sdl_render* Render, real32 dt)
