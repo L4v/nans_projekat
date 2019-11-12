@@ -39,8 +39,8 @@ typedef double real64;
 #define Pi32 3.14159265359f
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
-#define GRAVITY_VELOCITY  9.81f
-#define GLOBAL_FRICTION  10.0f
+#define GRAVITY_ACCEL  9.81f
+#define GLOBAL_FRICTION  0.5f
 
 #define DEFAULT_WINDOW_WIDTH 1024
 #define DEFAULT_WINDOW_HEIGHT 768

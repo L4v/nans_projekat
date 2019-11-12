@@ -110,7 +110,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Cubes[0].YAngle = 0.0f;
       SimState->Cubes[0].ZAngle = 0.0f;
       SimState->Cubes[0].Size = 1.0f;
-      SimState->Cubes[0].Mass = 10.0f;
+      SimState->Cubes[0].Mass = 1.0f;
 
       // NOTE(Jovan): Sphere init
       SimState->SphereCount = 1;
