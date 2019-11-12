@@ -121,7 +121,6 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Spheres[0].YAngle = 0.0f;
       SimState->Spheres[0].ZAngle = 0.0f;
       SimState->Spheres[0].Radius = 0.5f;
-
       
       Memory->IsInitialized = 1;
     }
@@ -205,6 +204,18 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
 		     SimState->Camera.Up);
 
+  // NOTE(Jovan): Coordinate drawing
+  glUseProgram(Render->Shaders[2]);
+  SetUniformM4(Render->Shaders[2], "View", View);
+  SetUniformM4(Render->Shaders[2], "Projection", Projection);
+  real32 LineLength = 100.0f;
+  Model = glm::mat4(1.0);
+  Model = glm::scale(Model, glm::vec3(LineLength));
+  SetUniformM4(Render->Shaders[2], "Model", Model);
+  glBindVertexArray(Render->VAOs[3]);
+  glDrawArrays(GL_LINES, 0, 6);
+  glBindVertexArray(0);
+  
   // NOTE(Jovan): Floor drawing
   // --------------------------
 

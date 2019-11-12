@@ -274,7 +274,7 @@ SDLUnloadSimCode(sdl_sim_code* SimCode)
 }
 
 
-void parse_file_into_str( const char *file_name, char *shader_str, int max_len ) {
+void LoadShader( const char *file_name, char *shader_str, int max_len ) {
   FILE *file = fopen( file_name, "r" );
   if ( !file ) {
     printf( "ERROR: opening file for reading: %s\n", file_name );
@@ -364,10 +364,16 @@ int main()
   char SphereFSSource[256 * 1024];
   char CubeVSSource[256 * 1024];
   char CubeFSSource[256 * 1024];
-  parse_file_into_str("../shaders/cube.vs", CubeVSSource, 256 * 1024);
-  parse_file_into_str("../shaders/cube.fs", CubeFSSource, 256 * 1024);
-  parse_file_into_str("../shaders/sphere.vs", SphereVSSource, 256 * 1024);
-  parse_file_into_str("../shaders/sphere.fs", SphereFSSource, 256 * 1024);
+  char LineVSSource[256 * 1024];
+  char LineFSSource[256 * 1024];
+
+  // TODO(Jovan): Rename shader loader
+  LoadShader("../shaders/cube.vs", CubeVSSource, 256 * 1024);
+  LoadShader("../shaders/cube.fs", CubeFSSource, 256 * 1024);
+  LoadShader("../shaders/sphere.vs", SphereVSSource, 256 * 1024);
+  LoadShader("../shaders/sphere.fs", SphereFSSource, 256 * 1024);
+  LoadShader("../shaders/line.vs", LineVSSource, 256 * 1024);
+  LoadShader("../shaders/line.fs", LineFSSource, 256 * 1024);
 
   real32 CubeVertices[] = {
 			   // X  |  Y   |  Z  | Tex coords
@@ -430,6 +436,15 @@ int main()
 			   50.0f, -0.5f, -50.0f,  2.0f, 2.0f	
   };
 
+  real32 CoordinateVertices[] ={
+				// X | Y   | Z   | R  | G  | B
+				0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // X
+				1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+				0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, // Y
+				0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, // Z
+				0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f
+  };
   
   uint32 Stacks = 20;
   uint32 Slices = 20;
@@ -475,32 +490,34 @@ int main()
     }
   
   // NOTE(Jovan): Creating shaders and shader programs
-  uint32 CubeVertexShader, CubeFragmentShader,
-    SphereVS, SphereFS;
-  uint32 CubeShaderProgram, SphereShaderProgram;
+  uint32 CubeVS, CubeFS,
+    SphereVS, SphereFS,
+    LineVS, LineFS;
+  uint32 CubeShaderProgram, SphereShaderProgram, LineShaderProgram;
+  
 
   // NOTE(Jovan): Cube shaders
-  CubeVertexShader = glCreateShader(GL_VERTEX_SHADER);
-  CubeFragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+  CubeVS = glCreateShader(GL_VERTEX_SHADER);
+  CubeFS = glCreateShader(GL_FRAGMENT_SHADER);
   const GLchar* p;
   p = (const GLchar*)CubeVSSource;
-  glShaderSource(CubeVertexShader, 1, &p, 0);
+  glShaderSource(CubeVS, 1, &p, 0);
   p = (const GLchar*)CubeFSSource;
-  glShaderSource(CubeFragmentShader, 1, &p, 0);
+  glShaderSource(CubeFS, 1, &p, 0);
   
-  glCompileShader(CubeVertexShader);
-  CheckShaderCompilation(CubeVertexShader, Vertex);
+  glCompileShader(CubeVS);
+  CheckShaderCompilation(CubeVS, Vertex);
   
-  glCompileShader(CubeFragmentShader);
-  CheckShaderCompilation(CubeVertexShader, Fragment);
+  glCompileShader(CubeFS);
+  CheckShaderCompilation(CubeVS, Fragment);
   
   CubeShaderProgram = glCreateProgram();
-  glAttachShader(CubeShaderProgram, CubeVertexShader);
-  glAttachShader(CubeShaderProgram, CubeFragmentShader);
+  glAttachShader(CubeShaderProgram, CubeVS);
+  glAttachShader(CubeShaderProgram, CubeFS);
   glLinkProgram(CubeShaderProgram);
   CheckShaderLink(CubeShaderProgram);
-  glDeleteShader(CubeVertexShader);
-  glDeleteShader(CubeFragmentShader);
+  glDeleteShader(CubeVS);
+  glDeleteShader(CubeFS);
 
   // NOTE(Jovan): Sphere shaders
   SphereVS  = glCreateShader(GL_VERTEX_SHADER);
@@ -524,13 +541,53 @@ int main()
   CheckShaderLink(SphereShaderProgram);
   glDeleteShader(SphereVS);
   glDeleteShader(SphereFS);
+
+  // NOTE(Jovan): Line shaders
+  LineVS = glCreateShader(GL_VERTEX_SHADER);
+  LineFS = glCreateShader(GL_FRAGMENT_SHADER);
+  p = (const GLchar*)LineVSSource;
+  glShaderSource(LineVS, 1, &p, 0);
+  p = (const GLchar*)LineFSSource;
+  glShaderSource(LineFS, 1, &p, 0);
+
+  glCompileShader(LineVS);
+  CheckShaderCompilation(LineVS, Vertex);
+  
+  glCompileShader(LineFS);
+  CheckShaderCompilation(LineFS, Fragment);
+
+  LineShaderProgram = glCreateProgram();
+  glAttachShader(LineShaderProgram, LineVS);
+  glAttachShader(LineShaderProgram, LineFS);
+  glLinkProgram(LineShaderProgram);
+  CheckShaderLink(LineShaderProgram);
+  glDeleteShader(LineVS);
+  glDeleteShader(LineFS);
   
   // NOTE(Jovan): VAO, EBO, VBO
   // TODO(Jovan): Gen arrays inside Render directly
   uint32 CubeVAO, CubeVBO, CubeEBO,
     SphereVAO, SphereVBO, SphereEBO,
-    FloorVAO, FloorVBO;
+    FloorVAO, FloorVBO,
+    CoordinateVAO, CoordinateVBO;
 
+  // NOTE(Jovan): Coordinate data
+  glGenVertexArrays(1, &CoordinateVAO);
+  glBindVertexArray(CoordinateVAO);
+  glGenBuffers(1, &CoordinateVBO);
+  
+  glBindBuffer(GL_ARRAY_BUFFER, CoordinateVAO);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(CoordinateVertices), CoordinateVertices,
+	       GL_DYNAMIC_DRAW);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(real32),
+			(void*)(0));
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(real32),
+			(void*)(3 * sizeof(real32)));
+  glEnableVertexAttribArray(1);
+  
+  glBindVertexArray(0);
+  
   // NOTE(Jovan): Floor data
   glGenVertexArrays(1, &FloorVAO);
   glBindVertexArray(FloorVAO);
@@ -637,6 +694,9 @@ int main()
 
   Render.Textures[2] = FloorTexture;
   Render.VAOs[2] = FloorVAO;
+
+  Render.Shaders[2] = LineShaderProgram;
+  Render.VAOs[3] = CoordinateVAO;
   
   while(Running)
     {
