@@ -133,6 +133,7 @@ struct cube
   glm::vec3 Position;
   glm::vec3 Velocity;
   glm::vec3 Forces;
+  glm::vec3 Vertices[8];
   real32 Size;
   real32 Mass;
   real32 XAngle;

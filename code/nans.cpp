@@ -74,6 +74,27 @@ ResolveCollision()
   // TODO(Jovan): Implement
 }
 
+internal void
+UpdateVertices(sdl_state* State, int32 CubeIndex)
+{
+  real32 Size = State->Cubes[CubeIndex].Size;
+  State->Cubes[CubeIndex].Vertices[0] = State->Cubes[CubeIndex].Position +
+    Size / 2.0f * glm::vec3(1.0, 1.0, 1.0);
+  State->Cubes[CubeIndex].Vertices[1] = State->Cubes[CubeIndex].Position +
+    Size / 2.0f * glm::vec3(1.0, 1.0, -1.0);
+  State->Cubes[CubeIndex].Vertices[2] = State->Cubes[CubeIndex].Position +
+    Size / 2.0f * glm::vec3(-1.0, 1.0, 1.0);
+  State->Cubes[CubeIndex].Vertices[3] = State->Cubes[CubeIndex].Position +
+    Size / 2.0f * glm::vec3(-1.0, 1.0, -1.0);
+  State->Cubes[CubeIndex].Vertices[4] = State->Cubes[CubeIndex].Position +
+    Size / 2.0f * glm::vec3(1.0, -1.0, 1.0);
+  State->Cubes[CubeIndex].Vertices[5] = State->Cubes[CubeIndex].Position +
+    Size / 2.0f * glm::vec3(1.0, -1.0, -1.0);
+  State->Cubes[CubeIndex].Vertices[6] = State->Cubes[CubeIndex].Position +
+    Size / 2.0f * glm::vec3(-1.0, -1.0, 1.0);
+  State->Cubes[CubeIndex].Vertices[7] = State->Cubes[CubeIndex].Position +
+    Size / 2.0f * glm::vec3(-1.0, -1.0, -1.0);
+}
 
 extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 {
@@ -111,6 +132,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Cubes[0].ZAngle = 0.0f;
       SimState->Cubes[0].Size = 1.0f;
       SimState->Cubes[0].Mass = 1.0f;
+      UpdateVertices(SimState, 0);
 
       // NOTE(Jovan): Sphere init
       SimState->SphereCount = 1;
@@ -190,6 +212,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   Y = Euler(MovementFunction, dt, Y0, SimState->Cubes[0].Forces, SimState->Cubes[0].Mass);
   SimState->Cubes[0].Position = Y.X;
   SimState->Cubes[0].Velocity = Y.Y;
+  UpdateVertices(SimState, 0);
   CubeClearForces(SimState, 0);
 
   // NOTE(Jovan): End physics stuff
@@ -209,11 +232,17 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SetUniformM4(Render->Shaders[2], "View", View);
   SetUniformM4(Render->Shaders[2], "Projection", Projection);
   real32 LineLength = 100.0f;
-  Model = glm::mat4(1.0);
-  Model = glm::scale(Model, glm::vec3(LineLength));
-  SetUniformM4(Render->Shaders[2], "Model", Model);
-  glBindVertexArray(Render->VAOs[3]);
-  glDrawArrays(GL_LINES, 0, 6);
+  for(uint32 i = 0;
+      i < 8;
+      ++i)
+    {
+      Model = glm::mat4(1.0);
+      Model = glm::translate(Model, SimState->Cubes[0].Vertices[i]);
+      Model = glm::scale(Model, glm::vec3(LineLength));
+      SetUniformM4(Render->Shaders[2], "Model", Model);
+      glBindVertexArray(Render->VAOs[3]);
+      glDrawArrays(GL_LINES, 0, 6);
+    }
   glBindVertexArray(0);
   
   // NOTE(Jovan): Floor drawing
