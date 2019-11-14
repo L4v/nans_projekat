@@ -162,13 +162,6 @@ CalculateSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Directi
   return Result;
 }
 
-internal inline glm::vec3
-DoubleCross(glm::vec3 A, glm::vec3 B)
-{
-  glm::vec3 Result = glm::cross(glm::cross(A, B), A);
-  return Result;
-}
-
 internal bool32
 AddSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction)
 {
@@ -217,7 +210,7 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
 
 	// NOTE(Jovan): Direction perpendicular to AB in the direction
 	// of the origin
-	Direction = DoubleCross(AB, A0);
+	Direction = glm::cross(glm::cross(AB, A0), AB);
       }break;
     case 3:
       {
@@ -235,10 +228,14 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
     case 4:
       {
 	// NOTE(Jovan): 3 edges of interest
-	glm::vec3 DA = State->Vertices[3] - State->Vertices[0];
-	glm::vec3 DB = State->Vertices[3] - State->Vertices[1];
-	glm::vec3 DC = State->Vertices[3] - State->Vertices[2];
+	// glm::vec3 DA = State->Vertices[3] - State->Vertices[0];
+	// glm::vec3 DB = State->Vertices[3] - State->Vertices[1];
+	// glm::vec3 DC = State->Vertices[3] - State->Vertices[2];
 
+	glm::vec3 DA = State->Vertices[0] - State->Vertices[3];
+	glm::vec3 DB = State->Vertices[1] - State->Vertices[3];
+	glm::vec3 DC = State->Vertices[2] - State->Vertices[3];
+	
 	// NOTE(Jovan): Dir to the origin
 	glm::vec3 D0 = -1.0f * State->Vertices[3];
 
@@ -246,19 +243,20 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
 	glm::vec3 ABDNorm = glm::cross(DA, DB);
 	glm::vec3 BCDNorm = glm::cross(DB, DC);
 	glm::vec3 CADNorm = glm::cross(DC, DA);
-	if(glm::dot(ABDNorm, D0) > 0)
+	
+	if(glm::dot(ABDNorm, D0) > 0.0f)
 	  {
 	    // NOTE(Jovan): Origin outside of ABD -> remove C
-	    RemoveVertex(State, 3);
+	    RemoveVertex(State, 2);
 	    Direction = ABDNorm;
 	  }
-	else if(glm::dot(BCDNorm, D0) > 0)
+	else if(glm::dot(BCDNorm, D0) > 0.0f)
 	  {
 	    // NOTE(Jovan): Origin outside of BCD -> remove A
 	    RemoveVertex(State, 0);
 	    Direction = BCDNorm;
 	  }
-	else if(glm::dot(CADNorm, D0) > 0)
+	else if(glm::dot(CADNorm, D0) > 0.0f)
 	  {
 	    // NOTE(Jovan): Origin outside of CAD -> remove B
 	    RemoveVertex(State, 1);
