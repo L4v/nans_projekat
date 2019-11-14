@@ -40,12 +40,13 @@ typedef double real64;
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
 #define GRAVITY_ACCEL  9.81f
-#define GLOBAL_FRICTION  0.5f
+#define GLOBAL_FRICTION  1.5f
 
 #define DEFAULT_WINDOW_WIDTH 1024
 #define DEFAULT_WINDOW_HEIGHT 768
 #define MAX_CUBE_COUNT 16
 #define MAX_SPHERE_COUNT 16
+#define MAX_GJK_ITERATIONS 20
 
 #if SLOW_BUILD
 #define Assert(Expression)			\
@@ -93,13 +94,21 @@ struct sdl_keyboard
 {
   union
   {
-    sdl_button_state Buttons[5];
+    sdl_button_state Buttons[11];
     struct{
       sdl_button_state MoveForward;
       sdl_button_state MoveBack;
       sdl_button_state MoveLeft;
       sdl_button_state MoveRight;
       sdl_button_state ShootAction;
+
+      // NOTE(Jovan): Moving the cube for debugging
+      sdl_button_state DebugUp;
+      sdl_button_state DebugDown;
+      sdl_button_state DebugLeft;
+      sdl_button_state DebugRight;
+      sdl_button_state DebugForward;
+      sdl_button_state DebugBack;
     };
   };
 };
@@ -179,6 +188,7 @@ struct sdl_state
   sdl_camera Camera;
   uint32 CubeCount;
   uint32 SphereCount;
+  uint32 GJKIteration;
 };
 
 

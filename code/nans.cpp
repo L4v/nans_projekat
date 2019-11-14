@@ -294,7 +294,8 @@ DetectCollisions(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
   bool32 Result = 0;
   evolve_result EvolutionResult = StillEvolving;
 
-  while(EvolutionResult == StillEvolving)
+  // TODO(Jovan): Possibly infinite while loop
+  while(EvolutionResult == StillEvolving && State->GJKIteration++ <= MAX_GJK_ITERATIONS)
     {
       EvolutionResult = EvolveSimplex(State, AIndex, BIndex);
     }
@@ -302,6 +303,11 @@ DetectCollisions(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
     {
       Result = 1;
     }
+  if(EvolutionResult == NoIntersection)
+    {
+      Result = 0;
+    }
+  State->GJKIteration = 0;
   return Result;
 }
 
@@ -317,7 +323,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       // NOTE(Jovan): Init random seed
       srand(time(0));
 
-      // NOTE(Jovan): Vertices init
+      // NOTE(Jovan): GJK init stuff
+      SimState->GJKIteration = 0;
       for(uint32 VertexIndex = 0;
 	  VertexIndex < ArrayCount(SimState->Vertices);
 	  ++VertexIndex)
@@ -325,6 +332,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 	  SimState->Vertices[VertexIndex] = glm::vec3(0.0f);
 	}
       SimState->VertexCount = 0;
+
       
       // NOTE(Jovan): Camera init
       SimState->Camera.FOV = 45.0f; 
@@ -419,6 +427,30 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   if(Input->KeyboardController.ShootAction.EndedDown)
     {
       CubeAddForce(SimState, 0, 20.0f * SimState->Camera.Front);
+    }
+  if(Input->KeyboardController.DebugLeft.EndedDown)
+    {
+      SimState->Cubes[0].Position += dt * glm::vec3(1.0, 0.0, 0.0);
+    }
+  if(Input->KeyboardController.DebugRight.EndedDown)
+    {
+      SimState->Cubes[0].Position += dt * glm::vec3(-1.0, 0.0, 0.0);
+    }
+  if(Input->KeyboardController.DebugUp.EndedDown)
+    {
+      SimState->Cubes[0].Position += dt * glm::vec3(0.0, 1.0, 0.0);
+    }
+  if(Input->KeyboardController.DebugDown.EndedDown)
+    {
+      SimState->Cubes[0].Position += dt * glm::vec3(0.0, -1.0, 0.0);
+    }
+  if(Input->KeyboardController.DebugForward.EndedDown)
+    {
+      SimState->Cubes[0].Position += dt * glm::vec3(0.0, 0.0, 1.0);
+    }
+  if(Input->KeyboardController.DebugBack.EndedDown)
+    {
+      SimState->Cubes[0].Position += dt * glm::vec3(0.0, 0.0, -1.0);
     }
 
   // TODO(Add normal constraint)
@@ -582,5 +614,15 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       
   // NOTE(Jovan): End sphere drawing
   // -------------------------------
+
+  // NOTE(Jovan): Logging
+  // --------------------
+
+  // TODO(Jovan): Make better logging
+
+  printf("Collision: %d\n", CollisionHappened);
+  
+  // NOTE(Jovan): End logging
+  // ------------------------
         
 }

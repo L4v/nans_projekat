@@ -196,6 +196,30 @@ SDLHandleEvent(SDL_Event* Event, sdl_input* Input, bool32* InFocus)
 	      {
 		SDLProcessSimKeyboardButton(&Input->KeyboardController.ShootAction, IsDown);
 	      }
+	    else if(KeyCode == SDLK_UP)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.DebugUp, IsDown);
+	      }
+	    else if(KeyCode == SDLK_DOWN)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.DebugDown, IsDown);
+	      }
+	    else if(KeyCode == SDLK_LEFT)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.DebugLeft, IsDown);
+	      }
+	    else if(KeyCode == SDLK_RIGHT)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.DebugRight, IsDown);
+	      }
+	    else if(KeyCode == SDLK_f)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.DebugForward, IsDown);
+	      }
+	    else if(KeyCode == SDLK_b)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.DebugBack, IsDown);
+	      }
 	    else if(KeyCode == SDLK_ESCAPE)
 	      {
 		ShouldQuit = 1;
