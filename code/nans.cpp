@@ -67,6 +67,30 @@ ResolveCollision()
 {
   // TODO(Jovan): Implement
 }
+internal void
+RemoveVertex(sdl_state* State, uint32 VertexIndex)
+{
+  Assert(VertexIndex < State->VertexCount);
+  for(uint32 i = VertexIndex;
+      i < State->VertexCount - 1;
+      ++i)
+    {
+      State->Vertices[i] = State->Vertices[i + 1];
+    }
+  State->VertexCount--;
+}
+internal inline void
+PushVertex(sdl_state* State, glm::vec3 Vertex)
+{
+  Assert(State->VertexCount < 4);
+  State->Vertices[State->VertexCount++] = Vertex;
+}
+
+internal inline void
+ResetVertices(sdl_state* State)
+{
+  State->VertexCount = 0;
+}
 
 internal void
 UpdateVertices(sdl_state* State, int32 CubeIndex)
@@ -94,7 +118,7 @@ internal glm::vec3
 GetCubeSupport(sdl_state* State, int32 CubeIndex, glm::vec3 Direction)
 {
   real32 MaxDistance = -FLT_MAX;
-  glm::vec3 Result;
+  glm::vec3 Result = glm::vec3(0.0f);
 
   // NOTE(Jovan) 8 vertices in a cube
   for(uint32 VertexIndex = 0;
@@ -116,7 +140,7 @@ GetCubeSupport(sdl_state* State, int32 CubeIndex, glm::vec3 Direction)
 internal glm::vec3
 CalculateSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction, collision_type Type)
 {
-  glm::vec3 Result;
+  glm::vec3 Result = glm::vec3(0.0f);
   switch(Type)
     {
     case CC:
@@ -150,7 +174,7 @@ AddSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction)
 {
   bool32 Result = 0;
   glm::vec3 NewVertex = CalculateSupport(State, AIndex, BIndex, Direction, CC);
-  State->Vertices.push_back(NewVertex);
+  PushVertex(State, NewVertex);
   if(glm::dot(Direction, NewVertex) >= 0)
     {
       Result = 1;
@@ -167,10 +191,10 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
 {
   // TODO(Jovan): For now, under the assumption that it's 2 cubes
   evolve_result Result = NoIntersection;
-  glm::vec3 Direction;
+  glm::vec3 Direction = glm::vec3(0.0f);
   cube* ShapeA = &State->Cubes[AIndex];
   cube* ShapeB = &State->Cubes[BIndex];
-  int32 NoVertices = State->Vertices.size();
+  uint32 NoVertices = State->VertexCount;
   switch(NoVertices)
     {
     case 0:
@@ -225,19 +249,19 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
 	if(glm::dot(ABDNorm, D0) > 0)
 	  {
 	    // NOTE(Jovan): Origin outside of ABD -> remove C
-	    State->Vertices.erase(State->Vertices.begin() + 2);
+	    RemoveVertex(State, 3);
 	    Direction = ABDNorm;
 	  }
 	else if(glm::dot(BCDNorm, D0) > 0)
 	  {
 	    // NOTE(Jovan): Origin outside of BCD -> remove A
-	    State->Vertices.erase(State->Vertices.begin());
+	    RemoveVertex(State, 0);
 	    Direction = BCDNorm;
 	  }
 	else if(glm::dot(CADNorm, D0) > 0)
 	  {
 	    // NOTE(Jovan): Origin outside of CAD -> remove B
-	    State->Vertices.erase(State->Vertices.begin() + 1);
+	    RemoveVertex(State, 1);
 	    Direction = CADNorm;
 	  }
 	else
@@ -292,6 +316,15 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
       // NOTE(Jovan): Init random seed
       srand(time(0));
+
+      // NOTE(Jovan): Vertices init
+      for(uint32 VertexIndex = 0;
+	  VertexIndex < ArrayCount(SimState->Vertices);
+	  ++VertexIndex)
+	{
+	  SimState->Vertices[VertexIndex] = glm::vec3(0.0f);
+	}
+      SimState->VertexCount = 0;
       
       // NOTE(Jovan): Camera init
       SimState->Camera.FOV = 45.0f; 
@@ -401,17 +434,17 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // --------------------------
   // TODO(Jovan): Implement
   bool32 CollisionHappened = DetectCollisions(SimState, 0, 1, CC);
-  printf("A: %f, %f, %f | B: %f, %f, %f | C:%d\n",
-	 SimState->Cubes[0].Position.x,
-	 SimState->Cubes[0].Position.y,
-	 SimState->Cubes[0].Position.z,
-	 SimState->Cubes[1].Position.x,
-	 SimState->Cubes[1].Position.y,
-	 SimState->Cubes[1].Position.z,
-	 CollisionHappened);
+  // printf("A: %f, %f, %f | B: %f, %f, %f | C:%d\n",
+  // 	 SimState->Cubes[0].Position.x,
+  // 	 SimState->Cubes[0].Position.y,
+  // 	 SimState->Cubes[0].Position.z,
+  // 	 SimState->Cubes[1].Position.x,
+  // 	 SimState->Cubes[1].Position.y,
+  // 	 SimState->Cubes[1].Position.z,
+  // 	 CollisionHappened);
   // TODO(Jovan): POSSIBLE MEMORY DEATH, but collision detection works
   // TODO(Jovan): Write own, memory safe, push function for array
-  SimState->Vertices.resize(0);
+  ResetVertices(SimState);
   ResolveCollision();
 
   for(uint32 CubeIndex = 0;

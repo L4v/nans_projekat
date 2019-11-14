@@ -172,7 +172,8 @@ struct sdl_state
 {
   // TODO(Jovan): Memory!!!
   // NOTE(Jovan): Vertices for the simplex
-  std::vector<glm::vec3> Vertices;
+  glm::vec3 Vertices[4];
+  uint32 VertexCount;
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
   sdl_camera Camera;
