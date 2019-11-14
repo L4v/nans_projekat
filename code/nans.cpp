@@ -63,12 +63,6 @@ CubeClearForces(sdl_state* State, int32 CubeIndex)
 };
 
 internal void
-DetectCollisions(sdl_state* State, real32 dt)
-{
-  // TODO(Jovan): Implement
-}
-
-internal void
 ResolveCollision()
 {
   // TODO(Jovan): Implement
@@ -96,6 +90,197 @@ UpdateVertices(sdl_state* State, int32 CubeIndex)
     Size / 2.0f * glm::vec3(-1.0, -1.0, -1.0);
 }
 
+internal glm::vec3
+GetCubeSupport(sdl_state* State, int32 CubeIndex, glm::vec3 Direction)
+{
+  real32 MaxDistance = -FLT_MAX;
+  glm::vec3 Result;
+
+  // NOTE(Jovan) 8 vertices in a cube
+  for(uint32 VertexIndex = 0;
+      VertexIndex < 8;
+      ++VertexIndex)
+    {
+      glm::vec3 CurrVertex = State->Cubes[CubeIndex].Vertices[VertexIndex];
+      real32 Distance = glm::dot(CurrVertex, Direction);
+      if(Distance > MaxDistance)
+	{
+	  MaxDistance = Distance;
+	  Result = CurrVertex;
+	}
+    }
+
+  return Result;
+}
+
+internal glm::vec3
+CalculateSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction, collision_type Type)
+{
+  glm::vec3 Result;
+  switch(Type)
+    {
+    case CC:
+      {
+	glm::vec3 SupportA = GetCubeSupport(State, AIndex, Direction);
+	glm::vec3 SupportB = GetCubeSupport(State, BIndex, -1.0f * Direction);
+	Result = SupportA - SupportB;
+      }break;
+    case CS:
+      {
+	// TODO(Jovan): Implement
+      }break;
+    case SS:
+      {
+	// TODO(Jovan): Implement
+      }break;
+    }
+
+  return Result;
+}
+
+internal inline glm::vec3
+DoubleCross(glm::vec3 A, glm::vec3 B)
+{
+  glm::vec3 Result = glm::cross(glm::cross(A, B), A);
+  return Result;
+}
+
+internal bool32
+AddSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction)
+{
+  bool32 Result = 0;
+  glm::vec3 NewVertex = CalculateSupport(State, AIndex, BIndex, Direction, CC);
+  State->Vertices.push_back(NewVertex);
+  if(glm::dot(Direction, NewVertex) >= 0)
+    {
+      Result = 1;
+    }
+  else
+    {
+      Result = 0;
+    }
+  return Result;
+}
+
+internal evolve_result
+EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
+{
+  // TODO(Jovan): For now, under the assumption that it's 2 cubes
+  evolve_result Result = NoIntersection;
+  glm::vec3 Direction;
+  cube* ShapeA = &State->Cubes[AIndex];
+  cube* ShapeB = &State->Cubes[BIndex];
+  int32 NoVertices = State->Vertices.size();
+  switch(NoVertices)
+    {
+    case 0:
+      {
+	// NOTE(Jovan): Best presumption of dir is the relative direction
+	// of the 2 shapes
+	Direction = ShapeB->Position - ShapeA->Position;
+      }break;
+    case 1:
+      {
+	// NOTE(Jovan): Flip the direction to point to the origin
+	Direction *= -1;
+      }break;
+    case 2:
+      {
+	// NOTE(Jovan): Form line from first 2 vertices
+	glm::vec3 AB = State->Vertices[1] - State->Vertices[0];
+	// NOTE(Jovan): Form line from origin to A
+	glm::vec3 A0 = -1.0f * State->Vertices[0];
+
+	// NOTE(Jovan): Direction perpendicular to AB in the direction
+	// of the origin
+	Direction = DoubleCross(AB, A0);
+      }break;
+    case 3:
+      {
+	glm::vec3 AC = State->Vertices[2] - State->Vertices[0];
+	glm::vec3 AB = State->Vertices[1] - State->Vertices[0];
+	Direction = glm::cross(AC, AB);
+
+	// NOTE(Jovan): Ensure that Direction points to the origin
+	glm::vec3 A0 = -1.0f * State->Vertices[0];
+	if(glm::dot(Direction, A0) < 0)
+	  {
+	    Direction *= -1.0f;
+	  }
+      }break;
+    case 4:
+      {
+	// NOTE(Jovan): 3 edges of interest
+	glm::vec3 DA = State->Vertices[3] - State->Vertices[0];
+	glm::vec3 DB = State->Vertices[3] - State->Vertices[1];
+	glm::vec3 DC = State->Vertices[3] - State->Vertices[2];
+
+	// NOTE(Jovan): Dir to the origin
+	glm::vec3 D0 = -1.0f * State->Vertices[3];
+
+	// NOTE(Jovan): Check triangles ABD, BCD, CAD
+	glm::vec3 ABDNorm = glm::cross(DA, DB);
+	glm::vec3 BCDNorm = glm::cross(DB, DC);
+	glm::vec3 CADNorm = glm::cross(DC, DA);
+	if(glm::dot(ABDNorm, D0) > 0)
+	  {
+	    // NOTE(Jovan): Origin outside of ABD -> remove C
+	    State->Vertices.erase(State->Vertices.begin() + 2);
+	    Direction = ABDNorm;
+	  }
+	else if(glm::dot(BCDNorm, D0) > 0)
+	  {
+	    // NOTE(Jovan): Origin outside of BCD -> remove A
+	    State->Vertices.erase(State->Vertices.begin());
+	    Direction = BCDNorm;
+	  }
+	else if(glm::dot(CADNorm, D0) > 0)
+	  {
+	    // NOTE(Jovan): Origin outside of CAD -> remove B
+	    State->Vertices.erase(State->Vertices.begin() + 1);
+	    Direction = CADNorm;
+	  }
+	else
+	  {
+	    // NOTE(Jovan): Origin is inside of the tetrahedron
+	    Result = FoundIntersection;
+	    return Result;
+	  }
+	
+      }break;
+    default:
+      {
+	printf("ERROR::There can't be more than 4 vertices\n");
+      }
+    }
+  if(AddSupport(State, AIndex, BIndex, Direction))
+    {
+      Result = StillEvolving;
+    }
+  else
+    {
+      Result = NoIntersection;
+    }
+  return Result;
+}
+
+internal bool32
+DetectCollisions(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Type)
+{
+  bool32 Result = 0;
+  evolve_result EvolutionResult = StillEvolving;
+
+  while(EvolutionResult == StillEvolving)
+    {
+      EvolutionResult = EvolveSimplex(State, AIndex, BIndex);
+    }
+  if(EvolutionResult == FoundIntersection)
+    {
+      Result = 1;
+    }
+  return Result;
+}
+
 extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 {
   sdl_state* SimState = (sdl_state*)Memory->PermanentStorage;
@@ -121,7 +306,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
       
       // NOTE(Jovan): Cube init
-      SimState->CubeCount = 1;
+      SimState->CubeCount = 2;
       SimState->Cubes[0].Position = glm::vec3(0.0,
 					      2.0,
 					      0.0);
@@ -133,6 +318,19 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Cubes[0].Size = 1.0f;
       SimState->Cubes[0].Mass = 1.0f;
       UpdateVertices(SimState, 0);
+
+      
+      SimState->Cubes[1].Position = glm::vec3(2.0,
+					      2.0,
+					      2.0);
+      SimState->Cubes[1].Velocity = glm::vec3(0.0);
+      SimState->Cubes[1].Forces = glm::vec3(0.0);
+      SimState->Cubes[1].XAngle = 0.0f;
+      SimState->Cubes[1].YAngle = 0.0f;
+      SimState->Cubes[1].ZAngle = 0.0f;
+      SimState->Cubes[1].Size = 1.0f;
+      SimState->Cubes[1].Mass = 1.0f;
+      UpdateVertices(SimState, 1);
 
       // NOTE(Jovan): Sphere init
       SimState->SphereCount = 1;
@@ -202,19 +400,35 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // NOTE(Jovan): Physics stuff
   // --------------------------
   // TODO(Jovan): Implement
-  DetectCollisions(SimState, dt);
+  bool32 CollisionHappened = DetectCollisions(SimState, 0, 1, CC);
+  printf("A: %f, %f, %f | B: %f, %f, %f | C:%d\n",
+	 SimState->Cubes[0].Position.x,
+	 SimState->Cubes[0].Position.y,
+	 SimState->Cubes[0].Position.z,
+	 SimState->Cubes[1].Position.x,
+	 SimState->Cubes[1].Position.y,
+	 SimState->Cubes[1].Position.z,
+	 CollisionHappened);
+  // TODO(Jovan): POSSIBLE MEMORY DEATH, but collision detection works
+  // TODO(Jovan): Write own, memory safe, push function for array
+  SimState->Vertices.resize(0);
   ResolveCollision();
 
-  phys_return Y0 = {};
-  phys_return Y = {};
-  Y0.X = SimState->Cubes[0].Position;
-  Y0.Y = SimState->Cubes[0].Velocity;
-  Y = Euler(MovementFunction, dt, Y0, SimState->Cubes[0].Forces, SimState->Cubes[0].Mass);
-  SimState->Cubes[0].Position = Y.X;
-  SimState->Cubes[0].Velocity = Y.Y;
-  UpdateVertices(SimState, 0);
-  CubeClearForces(SimState, 0);
-
+  for(uint32 CubeIndex = 0;
+      CubeIndex < SimState->CubeCount;
+      ++CubeIndex)
+    {
+      phys_return Y0 = {};
+      phys_return Y = {};
+      Y0.X = SimState->Cubes[CubeIndex].Position;
+      Y0.Y = SimState->Cubes[CubeIndex].Velocity;
+      Y = Euler(MovementFunction, dt, Y0, SimState->Cubes[CubeIndex].Forces, SimState->Cubes[CubeIndex].Mass);
+      SimState->Cubes[CubeIndex].Position = Y.X;
+      SimState->Cubes[CubeIndex].Velocity = Y.Y;
+      UpdateVertices(SimState, CubeIndex);
+      CubeClearForces(SimState, CubeIndex);
+    }
+  
   // NOTE(Jovan): End physics stuff
   // ------------------------------
   
@@ -232,16 +446,21 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SetUniformM4(Render->Shaders[2], "View", View);
   SetUniformM4(Render->Shaders[2], "Projection", Projection);
   real32 LineLength = 100.0f;
-  for(uint32 i = 0;
-      i < 8;
-      ++i)
+  for(uint32 CubeIndex = 0;
+      CubeIndex < SimState->CubeCount;
+      ++CubeIndex)
     {
-      Model = glm::mat4(1.0);
-      Model = glm::translate(Model, SimState->Cubes[0].Vertices[i]);
-      Model = glm::scale(Model, glm::vec3(LineLength));
-      SetUniformM4(Render->Shaders[2], "Model", Model);
-      glBindVertexArray(Render->VAOs[3]);
-      glDrawArrays(GL_LINES, 0, 6);
+      for(uint32 i = 0;
+	  i < 8;
+	  ++i)
+	{
+	  Model = glm::mat4(1.0);
+	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
+	  Model = glm::scale(Model, glm::vec3(LineLength));
+	  SetUniformM4(Render->Shaders[2], "Model", Model);
+	  glBindVertexArray(Render->VAOs[3]);
+	  glDrawArrays(GL_LINES, 0, 6);
+	}
     }
   glBindVertexArray(0);
   

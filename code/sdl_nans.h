@@ -1,6 +1,6 @@
 enum shader_type{
-     Vertex = 0,
-     Fragment
+		 Vertex = 0,
+		 Fragment
 };
 
 struct sdl_sim_code

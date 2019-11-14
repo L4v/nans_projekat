@@ -47,7 +47,6 @@ typedef double real64;
 #define MAX_CUBE_COUNT 16
 #define MAX_SPHERE_COUNT 16
 
-
 #if SLOW_BUILD
 #define Assert(Expression)			\
   if(!(Expression)) {*(int*)0 = 0;}
@@ -56,6 +55,25 @@ typedef double real64;
 #endif
 
 
+  enum collision_type
+    {
+     /* NOTE(Jovan): Types of collisions
+	CC - CUBE x CUBE
+	CS - CUBE x SPHERE
+	SS - SPHERE x SPHERE
+     */
+     CC = 0,
+     CS,
+     SS
+    };
+
+enum evolve_result
+  {
+   NoIntersection = 0,
+   FoundIntersection,
+   StillEvolving
+  };
+  
 struct sdl_mouse
 {
   real32 Sensitivity;
@@ -152,6 +170,9 @@ struct sphere
 
 struct sdl_state
 {
+  // TODO(Jovan): Memory!!!
+  // NOTE(Jovan): Vertices for the simplex
+  std::vector<glm::vec3> Vertices;
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
   sdl_camera Camera;
