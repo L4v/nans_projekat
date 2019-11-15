@@ -460,6 +460,8 @@ int main()
 			   50.0f, -0.5f, -50.0f,  2.0f, 2.0f	
   };
 
+  // TODO(Jovan): Use vertices for one line only so different lines other
+  // than the coordinate system can be created / drawn
   real32 CoordinateVertices[] ={
 				// X | Y   | Z   | R  | G  | B
 				0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // X
@@ -600,6 +602,7 @@ int main()
   glBindVertexArray(CoordinateVAO);
   glGenBuffers(1, &CoordinateVBO);
   
+  // TODO(Jovan): Change to static draw
   glBindBuffer(GL_ARRAY_BUFFER, CoordinateVAO);
   glBufferData(GL_ARRAY_BUFFER, sizeof(CoordinateVertices), CoordinateVertices,
 	       GL_DYNAMIC_DRAW);
@@ -617,6 +620,7 @@ int main()
   glBindVertexArray(FloorVAO);
   glGenBuffers(1, &FloorVBO);
   
+  // TODO(Jovan): Change to static draw
   glBindBuffer(GL_ARRAY_BUFFER, FloorVBO);
   glBufferData(GL_ARRAY_BUFFER, sizeof(FloorVertices), FloorVertices,
 	       GL_DYNAMIC_DRAW);
@@ -635,6 +639,7 @@ int main()
   glGenBuffers(1, &CubeVBO);
   glGenBuffers(1, &CubeEBO);
 
+  // TODO(Jovan): Change to static draw
   glBindBuffer(GL_ARRAY_BUFFER, CubeVBO);
   glBufferData(GL_ARRAY_BUFFER, sizeof(CubeVertices), CubeVertices,
 	       GL_DYNAMIC_DRAW);
