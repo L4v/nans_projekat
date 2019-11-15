@@ -317,6 +317,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // -----------------
   if(!Memory->IsInitialized)
     {
+      // TODO(Jovan): Implement memory arenas
 
       // NOTE(Jovan): Init random seed
       srand(time(0));
