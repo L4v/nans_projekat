@@ -1,8 +1,35 @@
 #include "nans.h"
+
 internal void
 SetUniformM4(uint32 ID, char* Uniform, const glm::mat4 &Mat4)
 {
   glUniformMatrix4fv(glGetUniformLocation(ID, Uniform), 1, GL_FALSE, &Mat4[0][0]);
+}
+
+internal void
+SetUniformV3(uint32 ID, char* Uniform, const glm::vec3 &Vec3)
+{
+  glUniform3fv(glGetUniformLocation(ID, Uniform), 1, &Vec3[0]);
+}
+
+internal void
+InitializeArena(memory_arena* Arena, memory_index Size, uint8* Base)
+{
+  Arena->Size = Size;
+  Arena->Base = Base;
+  Arena->Used = 0;
+}
+
+#define PushStruct(Arena, Type) (Type*)PushSize_(Arena, sizeof(Type))
+#define PushArray(Arena, Count, Type) (Type*)PushSize_(Arena, (Count) * sizeof(Type))
+internal void*
+PushSize_(memory_arena* Arena, memory_index Size)
+{
+  Assert((Arena->Used + Size) <= Arena->Size);
+  void* Result = Arena->Base + Arena->Used;
+  Arena->Used += Size;
+
+  return Result;
 }
 
 internal void
@@ -292,7 +319,6 @@ DetectCollisions(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
   bool32 Result = 0;
   evolve_result EvolutionResult = StillEvolving;
 
-  // TODO(Jovan): Possibly infinite while loop
   while(EvolutionResult == StillEvolving && State->GJKIteration++ <= MAX_GJK_ITERATIONS)
     {
       EvolutionResult = EvolveSimplex(State, AIndex, BIndex);
@@ -317,12 +343,15 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // -----------------
   if(!Memory->IsInitialized)
     {
-      // TODO(Jovan): Implement memory arenas
-
       // NOTE(Jovan): Init random seed
       srand(time(0));
 
       // NOTE(Jovan): GJK init stuff
+      InitializeArena(&SimState->SimplexArena, Memory->PermanentStorageSize - sizeof(sim_state),
+		      (uint8*)Memory->PermanentStorage + sizeof(game_state));
+      SimState->SimplexArena = PushStruct(&SimState->SimplexArena, simplex_arena);
+      simplex_arena* Simplex = SimState->SimplexArena;
+      Simplex->Vertices = PushArray(Simplex, 32, glm::vec3);
       SimState->GJKIteration = 0;
       for(uint32 VertexIndex = 0;
 	  VertexIndex < ArrayCount(SimState->Vertices);
@@ -465,16 +494,6 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // --------------------------
   // TODO(Jovan): Implement
   bool32 CollisionHappened = DetectCollisions(SimState, 0, 1, CC);
-  // printf("A: %f, %f, %f | B: %f, %f, %f | C:%d\n",
-  // 	 SimState->Cubes[0].Position.x,
-  // 	 SimState->Cubes[0].Position.y,
-  // 	 SimState->Cubes[0].Position.z,
-  // 	 SimState->Cubes[1].Position.x,
-  // 	 SimState->Cubes[1].Position.y,
-  // 	 SimState->Cubes[1].Position.z,
-  // 	 CollisionHappened);
-  // TODO(Jovan): POSSIBLE MEMORY DEATH, but collision detection works
-  // TODO(Jovan): Write own, memory safe, push function for array
   ResetVertices(SimState);
   ResolveCollision();
 
@@ -510,6 +529,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SetUniformM4(Render->Shaders[2], "View", View);
   SetUniformM4(Render->Shaders[2], "Projection", Projection);
   real32 LineLength = 100.0f;
+  glm::vec3 LineColor = glm::vec3(0.0);
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
       ++CubeIndex)
@@ -518,10 +538,33 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 	  i < 8;
 	  ++i)
 	{
+	  // NOTE(Jovan): X
 	  Model = glm::mat4(1.0);
 	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
 	  Model = glm::scale(Model, glm::vec3(LineLength));
 	  SetUniformM4(Render->Shaders[2], "Model", Model);
+	  LineColor = glm::vec3(1.0f, 0.0f, 0.0f);
+	  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
+	  glBindVertexArray(Render->VAOs[3]);
+	  glDrawArrays(GL_LINES, 0, 6);
+	  // NOTE(Jovan): Y
+	  Model = glm::mat4(1.0);
+	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
+	  Model = glm::rotate(Model, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	  Model = glm::scale(Model, glm::vec3(LineLength));
+	  SetUniformM4(Render->Shaders[2], "Model", Model);
+	  LineColor = glm::vec3(0.0f, 1.0f, 0.0f);
+	  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
+	  glBindVertexArray(Render->VAOs[3]);
+	  glDrawArrays(GL_LINES, 0, 6);
+	  // NOTE(Jovan): Z
+	  Model = glm::mat4(1.0);
+	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
+	  Model = glm::rotate(Model, glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	  Model = glm::scale(Model, glm::vec3(LineLength));
+	  SetUniformM4(Render->Shaders[2], "Model", Model);
+	  LineColor = glm::vec3(0.0f, 0.0f, 1.0f);
+	  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
 	  glBindVertexArray(Render->VAOs[3]);
 	  glDrawArrays(GL_LINES, 0, 6);
 	}
