@@ -140,6 +140,19 @@ struct memory
   bool32 IsInitialized;
 };
 
+struct memory_arena
+{
+  memory_index Size;
+  uint8* Base;
+  memory_index Used;
+};
+
+struct simplex
+{
+  uint32 Count;
+  glm::vec3* Vertices;
+};
+
 struct sdl_camera
 {
   real32 FOV;
@@ -179,10 +192,9 @@ struct sphere
 
 struct sdl_state
 {
-  // TODO(Jovan): Memory!!!
   // NOTE(Jovan): Vertices for the simplex
-  glm::vec3 Vertices[4];
-  uint32 VertexCount;
+  memory_arena SimplexArena;
+  simplex* Simplex;
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
   sdl_camera Camera;

@@ -464,12 +464,8 @@ int main()
   // than the coordinate system can be created / drawn
   real32 CoordinateVertices[] ={
 				// X | Y   | Z   | R  | G  | B
-				0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // X
-				1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-				0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, // Y
-				0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-				0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, // Z
-				0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f
+				0.0f, 0.0f, 0.0f,
+				1.0f, 0.0f, 0.0f
   };
   
   uint32 Stacks = 20;
@@ -606,12 +602,9 @@ int main()
   glBindBuffer(GL_ARRAY_BUFFER, CoordinateVAO);
   glBufferData(GL_ARRAY_BUFFER, sizeof(CoordinateVertices), CoordinateVertices,
 	       GL_DYNAMIC_DRAW);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(real32),
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(real32),
 			(void*)(0));
   glEnableVertexAttribArray(0);
-  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(real32),
-			(void*)(3 * sizeof(real32)));
-  glEnableVertexAttribArray(1);
   
   glBindVertexArray(0);
   

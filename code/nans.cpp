@@ -1,8 +1,35 @@
 #include "nans.h"
+
 internal void
 SetUniformM4(uint32 ID, char* Uniform, const glm::mat4 &Mat4)
 {
   glUniformMatrix4fv(glGetUniformLocation(ID, Uniform), 1, GL_FALSE, &Mat4[0][0]);
+}
+
+internal void
+SetUniformV3(uint32 ID, char* Uniform, const glm::vec3 &Vec3)
+{
+  glUniform3fv(glGetUniformLocation(ID, Uniform), 1, &Vec3[0]);
+}
+
+internal void
+InitializeArena(memory_arena* Arena, memory_index Size, uint8* Base)
+{
+  Arena->Size = Size;
+  Arena->Base = Base;
+  Arena->Used = 0;
+}
+
+#define PushStruct(Arena, Type) (Type*)PushSize_(Arena, sizeof(Type))
+#define PushArray(Arena, Count, Type) (Type*)PushSize_(Arena, (Count) * sizeof(Type))
+internal void*
+PushSize_(memory_arena* Arena, memory_index Size)
+{
+  Assert((Arena->Used + Size) <= Arena->Size);
+  void* Result = Arena->Base + Arena->Used;
+  Arena->Used += Size;
+
+  return Result;
 }
 
 internal void
@@ -68,28 +95,27 @@ ResolveCollision()
   // TODO(Jovan): Implement
 }
 internal void
-RemoveVertex(sdl_state* State, uint32 VertexIndex)
+RemoveVertex(simplex* Simplex, uint32 VertexIndex)
 {
-  Assert(VertexIndex < State->VertexCount);
+  Assert(VertexIndex < Simplex->Count);
   for(uint32 i = VertexIndex;
-      i < State->VertexCount - 1;
+      i < Simplex->Count - 1;
       ++i)
     {
-      State->Vertices[i] = State->Vertices[i + 1];
+      Simplex->Vertices[i] = Simplex->Vertices[i + 1];
     }
-  State->VertexCount--;
+  Simplex->Count--;
 }
 internal inline void
-PushVertex(sdl_state* State, glm::vec3 Vertex)
+PushVertex(simplex* Simplex, glm::vec3 Vertex)
 {
-  Assert(State->VertexCount < 4);
-  State->Vertices[State->VertexCount++] = Vertex;
+  Simplex->Vertices[Simplex->Count++] = Vertex;
 }
 
 internal inline void
-ResetVertices(sdl_state* State)
+ResetVertices(simplex* Simplex)
 {
-  State->VertexCount = 0;
+  Simplex->Count = 0;
 }
 
 internal void
@@ -167,7 +193,7 @@ AddSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction)
 {
   bool32 Result = 0;
   glm::vec3 NewVertex = CalculateSupport(State, AIndex, BIndex, Direction, CC);
-  PushVertex(State, NewVertex);
+  PushVertex(State->Simplex, NewVertex);
   if(glm::dot(Direction, NewVertex) >= 0)
     {
       Result = 1;
@@ -187,7 +213,8 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
   glm::vec3 Direction = glm::vec3(0.0f);
   cube* ShapeA = &State->Cubes[AIndex];
   cube* ShapeB = &State->Cubes[BIndex];
-  uint32 NoVertices = State->VertexCount;
+  simplex* Simplex = State->Simplex;
+  uint32 NoVertices = Simplex->Count;
   switch(NoVertices)
     {
     case 0:
@@ -204,9 +231,9 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
     case 2:
       {
 	// NOTE(Jovan): Form line from first 2 vertices
-	glm::vec3 AB = State->Vertices[1] - State->Vertices[0];
+	glm::vec3 AB = Simplex->Vertices[1] - Simplex->Vertices[0];
 	// NOTE(Jovan): Form line from origin to A
-	glm::vec3 A0 = -1.0f * State->Vertices[0];
+	glm::vec3 A0 = -1.0f * Simplex->Vertices[0];
 
 	// NOTE(Jovan): Direction perpendicular to AB in the direction
 	// of the origin
@@ -214,12 +241,12 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
       }break;
     case 3:
       {
-	glm::vec3 AC = State->Vertices[2] - State->Vertices[0];
-	glm::vec3 AB = State->Vertices[1] - State->Vertices[0];
+	glm::vec3 AC = Simplex->Vertices[2] - Simplex->Vertices[0];
+	glm::vec3 AB = Simplex->Vertices[1] - Simplex->Vertices[0];
 	Direction = glm::cross(AC, AB);
 
 	// NOTE(Jovan): Ensure that Direction points to the origin
-	glm::vec3 A0 = -1.0f * State->Vertices[0];
+	glm::vec3 A0 = -1.0f * Simplex->Vertices[0];
 	if(glm::dot(Direction, A0) < 0)
 	  {
 	    Direction *= -1.0f;
@@ -228,16 +255,16 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
     case 4:
       {
 	// NOTE(Jovan): 3 edges of interest
-	// glm::vec3 DA = State->Vertices[3] - State->Vertices[0];
-	// glm::vec3 DB = State->Vertices[3] - State->Vertices[1];
-	// glm::vec3 DC = State->Vertices[3] - State->Vertices[2];
+	// glm::vec3 DA = Simplex->Vertices[3] - Simplex->Vertices[0];
+	// glm::vec3 DB = Simplex->Vertices[3] - Simplex->Vertices[1];
+	// glm::vec3 DC = Simplex->Vertices[3] - Simplex->Vertices[2];
 
-	glm::vec3 DA = State->Vertices[0] - State->Vertices[3];
-	glm::vec3 DB = State->Vertices[1] - State->Vertices[3];
-	glm::vec3 DC = State->Vertices[2] - State->Vertices[3];
+	glm::vec3 DA = Simplex->Vertices[0] - Simplex->Vertices[3];
+	glm::vec3 DB = Simplex->Vertices[1] - Simplex->Vertices[3];
+	glm::vec3 DC = Simplex->Vertices[2] - Simplex->Vertices[3];
 	
 	// NOTE(Jovan): Dir to the origin
-	glm::vec3 D0 = -1.0f * State->Vertices[3];
+	glm::vec3 D0 = -1.0f * Simplex->Vertices[3];
 
 	// NOTE(Jovan): Check triangles ABD, BCD, CAD
 	glm::vec3 ABDNorm = glm::cross(DA, DB);
@@ -247,19 +274,19 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
 	if(glm::dot(ABDNorm, D0) > 0.0f)
 	  {
 	    // NOTE(Jovan): Origin outside of ABD -> remove C
-	    RemoveVertex(State, 2);
+	    RemoveVertex(Simplex, 2);
 	    Direction = ABDNorm;
 	  }
 	else if(glm::dot(BCDNorm, D0) > 0.0f)
 	  {
 	    // NOTE(Jovan): Origin outside of BCD -> remove A
-	    RemoveVertex(State, 0);
+	    RemoveVertex(Simplex, 0);
 	    Direction = BCDNorm;
 	  }
 	else if(glm::dot(CADNorm, D0) > 0.0f)
 	  {
 	    // NOTE(Jovan): Origin outside of CAD -> remove B
-	    RemoveVertex(State, 1);
+	    RemoveVertex(Simplex, 1);
 	    Direction = CADNorm;
 	  }
 	else
@@ -292,7 +319,6 @@ DetectCollisions(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
   bool32 Result = 0;
   evolve_result EvolutionResult = StillEvolving;
 
-  // TODO(Jovan): Possibly infinite while loop
   while(EvolutionResult == StillEvolving && State->GJKIteration++ <= MAX_GJK_ITERATIONS)
     {
       EvolutionResult = EvolveSimplex(State, AIndex, BIndex);
@@ -322,20 +348,18 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // -----------------
   if(!Memory->IsInitialized)
     {
-      // TODO(Jovan): Implement memory arenas
-
       // NOTE(Jovan): Init random seed
       srand(time(0));
 
       // NOTE(Jovan): GJK init stuff
+      InitializeArena(&SimState->SimplexArena, Memory->PermanentStorageSize - sizeof(sdl_state),
+		      (uint8*)Memory->PermanentStorage + sizeof(sdl_state));
+      SimState->Simplex = PushStruct(&SimState->SimplexArena, simplex);
+      simplex* Simplex = SimState->Simplex;
+      Simplex->Count = 0;
+      Simplex->Vertices = PushArray(&SimState->SimplexArena, 32, glm::vec3);
       SimState->GJKIteration = 0;
-      for(uint32 VertexIndex = 0;
-	  VertexIndex < ArrayCount(SimState->Vertices);
-	  ++VertexIndex)
-	{
-	  SimState->Vertices[VertexIndex] = glm::vec3(0.0f);
-	}
-      SimState->VertexCount = 0;
+      Simplex->Count = 0;
 
       
       // NOTE(Jovan): Camera init
@@ -468,19 +492,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Physics stuff
   // --------------------------
-  // TODO(Jovan): Implement
   bool32 CollisionHappened = DetectCollisions(SimState, 0, 1, CC);
-  // printf("A: %f, %f, %f | B: %f, %f, %f | C:%d\n",
-  // 	 SimState->Cubes[0].Position.x,
-  // 	 SimState->Cubes[0].Position.y,
-  // 	 SimState->Cubes[0].Position.z,
-  // 	 SimState->Cubes[1].Position.x,
-  // 	 SimState->Cubes[1].Position.y,
-  // 	 SimState->Cubes[1].Position.z,
-  // 	 CollisionHappened);
-  // TODO(Jovan): POSSIBLE MEMORY DEATH, but collision detection works
-  // TODO(Jovan): Write own, memory safe, push function for array
-  ResetVertices(SimState);
+  ResetVertices(SimState->Simplex);
   ResolveCollision();
 
   for(uint32 CubeIndex = 0;
@@ -515,6 +528,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SetUniformM4(Render->Shaders[2], "View", View);
   SetUniformM4(Render->Shaders[2], "Projection", Projection);
   real32 LineLength = 100.0f;
+  glm::vec3 LineColor = glm::vec3(0.0);
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
       ++CubeIndex)
@@ -523,10 +537,33 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 	  i < 8;
 	  ++i)
 	{
+	  // NOTE(Jovan): X
 	  Model = glm::mat4(1.0);
 	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
 	  Model = glm::scale(Model, glm::vec3(LineLength));
 	  SetUniformM4(Render->Shaders[2], "Model", Model);
+	  LineColor = glm::vec3(1.0f, 0.0f, 0.0f);
+	  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
+	  glBindVertexArray(Render->VAOs[3]);
+	  glDrawArrays(GL_LINES, 0, 6);
+	  // NOTE(Jovan): Y
+	  Model = glm::mat4(1.0);
+	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
+	  Model = glm::rotate(Model, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	  Model = glm::scale(Model, glm::vec3(LineLength));
+	  SetUniformM4(Render->Shaders[2], "Model", Model);
+	  LineColor = glm::vec3(0.0f, 1.0f, 0.0f);
+	  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
+	  glBindVertexArray(Render->VAOs[3]);
+	  glDrawArrays(GL_LINES, 0, 6);
+	  // NOTE(Jovan): Z
+	  Model = glm::mat4(1.0);
+	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
+	  Model = glm::rotate(Model, glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	  Model = glm::scale(Model, glm::vec3(LineLength));
+	  SetUniformM4(Render->Shaders[2], "Model", Model);
+	  LineColor = glm::vec3(0.0f, 0.0f, 1.0f);
+	  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
 	  glBindVertexArray(Render->VAOs[3]);
 	  glDrawArrays(GL_LINES, 0, 6);
 	}
