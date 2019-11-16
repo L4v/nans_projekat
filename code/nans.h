@@ -147,9 +147,9 @@ struct memory_arena
   memory_index Used;
 };
 
-struct simplex_arena
+struct simplex
 {
-  uint32 VertexCount;
+  uint32 Count;
   glm::vec3* Vertices;
 };
 
@@ -192,9 +192,9 @@ struct sphere
 
 struct sdl_state
 {
-  // TODO(Jovan): Memory!!!
   // NOTE(Jovan): Vertices for the simplex
-  simplex_arena* SimplexArena;
+  memory_arena SimplexArena;
+  simplex* Simplex;
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
   sdl_camera Camera;
