@@ -191,6 +191,18 @@ struct sdl_state
   uint32 GJKIteration;
 };
 
+//NOTE(ALEKSA): Epa
+
+struct SupportPoint
+{
+	glm::vec3 v;
+	
+	glm::vec3 supp_a;
+	glm::vec3 supp_b;
+
+	BOOL operator == (const SupportPoint &r) const { return v == r.v; }
+};
+
 
 // NOTE(Jovan): Return value for ODEs and physics functions
 // TODO(Jovan): Maybe use other method?

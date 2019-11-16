@@ -309,6 +309,11 @@ DetectCollisions(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
   return Result;
 }
 
+//NOTE(ALEKSA): epa
+auto lam_support = [&](glm::vec3 d)->SupportPoint
+
+
+
 extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 {
   sdl_state* SimState = (sdl_state*)Memory->PermanentStorage;
