@@ -90,11 +90,6 @@ CubeClearForces(sdl_state* State, int32 CubeIndex)
 };
 
 internal void
-ResolveCollision()
-{
-  // TODO(Jovan): Implement
-}
-internal void
 RemoveVertex(simplex* Simplex, uint32 VertexIndex)
 {
   Assert(VertexIndex < Simplex->Count);
@@ -106,16 +101,101 @@ RemoveVertex(simplex* Simplex, uint32 VertexIndex)
     }
   Simplex->Count--;
 }
-internal inline void
-PushVertex(simplex* Simplex, glm::vec3 Vertex)
+internal void
+PushVertex(simplex* Simplex, vertex V)
 {
-  Simplex->Vertices[Simplex->Count++] = Vertex;
+  Simplex->Vertices[Simplex->Count] = V;
+  Simplex->Count++;
 }
 
 internal inline void
-ResetVertices(simplex* Simplex)
+ClearVertices(simplex* Simplex)
 {
   Simplex->Count = 0;
+}
+
+internal void
+RemoveEdge(edge* Edge, uint32 EdgeIndex)
+{
+  Assert(EdgeIndex < Edge->Count);
+  for(uint32 i = EdgeIndex;
+      i < Edge->Count - 1;
+      ++i)
+    {
+      Edge->A[i] = Edge->A[i + 1];
+      Edge->B[i] = Edge->B[i + 1];
+    }
+  Edge->Count--;
+}
+
+internal void
+PushEdge(edge* Edge, vertex A, vertex B)
+{
+  // NOTE(Jovan): Checks whether an edge of opposite
+  // winding already exists on the list.
+  // If it does, remove it and don't add the new one
+  for(uint32 EdgeIndex = 0;
+      EdgeIndex < Edge->Count;
+      ++EdgeIndex)
+    {
+      if(Edge->A[EdgeIndex] == B && Edge->B[EdgeIndex] == A)
+	{
+	  RemoveEdge(Edge, EdgeIndex);
+	  return;
+	}
+    }
+
+  // NOTE(Jovan): The edge didn't exist, so it's being added
+  Edge->A[Edge->Count] = A;
+  Edge->B[Edge->Count] = B;
+  Edge->Count++;
+}
+
+internal void
+ClearEdges(edge* Edge)
+{
+  Edge->Count = 0;
+}
+
+internal void
+RemoveTriangle(triangle* Triangle, uint32 TriangleIndex)
+{
+  Assert(TriangleIndex < Triangle->Count);
+  for(uint32 i = TriangleIndex;
+      i < Triangle->Count - 1;
+      ++i)
+    {
+      Triangle->A[i] = Triangle->A[i+1];
+      Triangle->B[i] = Triangle->B[i+1];
+      Triangle->C[i] = Triangle->C[i+1];
+      Triangle->N[i] = Triangle->N[i+1];
+    }
+  Triangle->Count--;
+}
+
+// NOTE(Jovan): Push triangle using vertices
+internal void
+PushTriangle(triangle* Triangle, vertex A, vertex B, vertex C)
+{
+  Triangle->A[Triangle->Count] = A;
+  Triangle->B[Triangle->Count] = B;
+  Triangle->C[Triangle->Count] = C;
+
+  // NOTE(Jovan): Calculate normal and make sure it's
+  // pointing away from the origin
+  glm::vec3 A0 = -1.0f * Triangle->A[Triangle->Count].P;
+  if(glm::dot(A0, Triangle->N[Triangle->Count]) < 0)
+    {
+      Triangle->N[Triangle->Count] *= -1.0f;
+    }
+  
+  Triangle->Count++;
+}
+
+internal inline void
+ClearTriangles(triangle* Triangle)
+{
+  Triangle->Count = 0;
 }
 
 internal void
@@ -163,17 +243,19 @@ GetCubeSupport(sdl_state* State, int32 CubeIndex, glm::vec3 Direction)
   return Result;
 }
 
-internal glm::vec3
+internal vertex
 CalculateSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction, collision_type Type)
 {
-  glm::vec3 Result = glm::vec3(0.0f);
+  vertex Result = {};
   switch(Type)
     {
     case CC:
       {
 	glm::vec3 SupportA = GetCubeSupport(State, AIndex, Direction);
 	glm::vec3 SupportB = GetCubeSupport(State, BIndex, -1.0f * Direction);
-	Result = SupportA - SupportB;
+	Result.P = SupportA - SupportB;
+	Result.SupA = SupportA;
+	PushVertex(State->Simplex, Result);
       }break;
     case CS:
       {
@@ -192,9 +274,8 @@ internal bool32
 AddSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction)
 {
   bool32 Result = 0;
-  glm::vec3 NewVertex = CalculateSupport(State, AIndex, BIndex, Direction, CC);
-  PushVertex(State->Simplex, NewVertex);
-  if(glm::dot(Direction, NewVertex) >= 0)
+  vertex NewVertex = CalculateSupport(State, AIndex, BIndex, Direction, CC);
+  if(glm::dot(Direction, NewVertex.P) >= 0)
     {
       Result = 1;
     }
@@ -231,9 +312,9 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
     case 2:
       {
 	// NOTE(Jovan): Form line from first 2 vertices
-	glm::vec3 AB = Simplex->Vertices[1] - Simplex->Vertices[0];
+	glm::vec3 AB = Simplex->Vertices[1].P - Simplex->Vertices[0].P;
 	// NOTE(Jovan): Form line from origin to A
-	glm::vec3 A0 = -1.0f * Simplex->Vertices[0];
+	glm::vec3 A0 = -1.0f * Simplex->Vertices[0].P;
 
 	// NOTE(Jovan): Direction perpendicular to AB in the direction
 	// of the origin
@@ -241,12 +322,12 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
       }break;
     case 3:
       {
-	glm::vec3 AC = Simplex->Vertices[2] - Simplex->Vertices[0];
-	glm::vec3 AB = Simplex->Vertices[1] - Simplex->Vertices[0];
+	glm::vec3 AC = Simplex->Vertices[2].P - Simplex->Vertices[0].P;
+	glm::vec3 AB = Simplex->Vertices[1].P - Simplex->Vertices[0].P;
 	Direction = glm::cross(AC, AB);
 
 	// NOTE(Jovan): Ensure that Direction points to the origin
-	glm::vec3 A0 = -1.0f * Simplex->Vertices[0];
+	glm::vec3 A0 = -1.0f * Simplex->Vertices[0].P;
 	if(glm::dot(Direction, A0) < 0)
 	  {
 	    Direction *= -1.0f;
@@ -259,12 +340,12 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
 	// glm::vec3 DB = Simplex->Vertices[3] - Simplex->Vertices[1];
 	// glm::vec3 DC = Simplex->Vertices[3] - Simplex->Vertices[2];
 
-	glm::vec3 DA = Simplex->Vertices[0] - Simplex->Vertices[3];
-	glm::vec3 DB = Simplex->Vertices[1] - Simplex->Vertices[3];
-	glm::vec3 DC = Simplex->Vertices[2] - Simplex->Vertices[3];
+	glm::vec3 DA = Simplex->Vertices[0].P - Simplex->Vertices[3].P;
+	glm::vec3 DB = Simplex->Vertices[1].P - Simplex->Vertices[3].P;
+	glm::vec3 DC = Simplex->Vertices[2].P - Simplex->Vertices[3].P;
 	
 	// NOTE(Jovan): Dir to the origin
-	glm::vec3 D0 = -1.0f * Simplex->Vertices[3];
+	glm::vec3 D0 = -1.0f * Simplex->Vertices[3].P;
 
 	// NOTE(Jovan): Check triangles ABD, BCD, CAD
 	glm::vec3 ABDNorm = glm::cross(DA, DB);
@@ -335,10 +416,121 @@ DetectCollisions(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
   return Result;
 }
 
-//NOTE(ALEKSA): epa
-auto lam_support = [&](glm::vec3 d)->SupportPoint
+internal uint32
+FindClosestFace(triangle* Triangle)
+{
+  uint32 Closest = 0;
+  real32 MinDistance = FLT_MAX;
+  for(uint32 TriangleIndex = 0;
+      TriangleIndex < Triangle->Count;
+      ++TriangleIndex)
+    {
+      real32 Distance = glm::dot(Triangle->N[TriangleIndex], Triangle->A[TriangleIndex].P);
+      if(Distance < MinDistance)
+	{
+	  MinDistance = Distance;
+	  Closest = TriangleIndex;
+	}
+    }
+  return Closest;
+}
 
+internal void
+Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
+	    real32* U, real32* V, real32* W)
+{
+  // TODO(Jovan): Use State?
+  glm::vec3 V0 = B - A, V1 = C - A, V2 = P - A;
+  real32 D00 = glm::dot(V0, V0);
+  real32 D01 = glm::dot(V0, V1);
+  real32 D11 = glm::dot(V1, V1);
+  real32 D20 = glm::dot(V2, V0);
+  real32 D21 = glm::dot(V2, V1);
+  real32 Denom = D00 * D11 - D01 * D01;
+  *V = (D11 * D20 - D01 * D21) / Denom;
+  *W = (D00 * D21 - D01 * D20) / Denom;
+  *U = 1.0f - *V - *W;
+}
 
+internal void
+ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Type)
+{
+  int32 CurrIter = 0;
+  while(1)
+    {
+      simplex* Simplex = State->Simplex;
+      edge* Edge = State->Edge;
+      triangle* Triangle = State->Triangle;
+
+      Assert(Simplex->Count >= 4);
+      // TODO(Jovan): Maybe use already loaded points for simplex
+      // and just push triangles from their indices?
+      vertex A = Simplex->Vertices[0];
+      vertex B = Simplex->Vertices[1];
+      vertex C = Simplex->Vertices[2];
+      vertex D = Simplex->Vertices[3];
+      PushTriangle(Triangle, A, B, C); // ABC
+      PushTriangle(Triangle, A, C, D); // ACD
+      PushTriangle(Triangle, A, D, B); // ADB
+      PushTriangle(Triangle, B, D, C); // BDC
+
+      // NOTE(Jovan): Generate new point in the direction
+      // of the closest triangle
+      uint32 ClosestIndex = FindClosestFace(Triangle);
+      real32 CurrentDistance = glm::dot(Triangle->N[ClosestIndex], Triangle->A[ClosestIndex].P);
+      glm::vec3 Direction = Triangle->N[ClosestIndex];
+      vertex NewSupport = CalculateSupport(State, AIndex, BIndex, Direction, Type);
+
+      // NOTE(Jovan): Removing triangle that can be "seen" by the new point
+      for(uint32 TriangleIndex = 0;
+	  TriangleIndex < Triangle->Count;)
+	{
+	  if(glm::dot(Triangle->N[TriangleIndex], NewSupport.P - Triangle->A[TriangleIndex].P) > 0)
+	    {
+	      // NOTE(Jovan): "Disolve" the removed triangle into it's edges
+	      // and push them onto the edge list
+	      PushEdge(Edge, Triangle->A[TriangleIndex], Triangle->B[TriangleIndex]); // AB
+	      PushEdge(Edge, Triangle->B[TriangleIndex], Triangle->C[TriangleIndex]); // BC
+	      PushEdge(Edge, Triangle->C[TriangleIndex], Triangle->A[TriangleIndex]); // CA
+	      continue;
+	    }
+	  ++TriangleIndex;
+	}
+
+      // NOTE(Jovan): Construct new triangles
+      for(uint32 EdgeIndex = 0;
+	  EdgeIndex < Edge->Count;
+	  ++EdgeIndex)
+	{
+	  PushTriangle(Triangle, NewSupport, Edge->A[EdgeIndex], Edge->B[EdgeIndex]);
+	}
+      // NOTE(Jovan): Clear the edge list
+      ClearEdges(Edge);
+
+      // NOTE(Jovan): Calculate collision point and normal as linear combination
+      // of barycentric pointss
+      if(glm::dot(Triangle->N[ClosestIndex], NewSupport.P) - CurrentDistance < MAX_EPA_ERROR)
+	{
+	  real32 BaryU, BaryV, BaryW;
+	  Barycentric(Triangle->N[ClosestIndex] * CurrentDistance,
+		      Triangle->A[ClosestIndex].P,
+		      Triangle->B[ClosestIndex].P,
+		      Triangle->A[ClosestIndex].P,
+		      &BaryU, &BaryV, &BaryW);
+	  glm::vec3 CollisionPoint = (BaryU * Triangle->A[ClosestIndex].SupA +
+				      BaryV * Triangle->B[ClosestIndex].SupA +
+				      BaryW * Triangle->C[ClosestIndex].SupA);
+	  glm::vec3 CollisionNormal = -1.0f * Triangle->N[ClosestIndex];
+
+	  printf("Point = %f, %f, %f",
+		 CollisionPoint.x,
+		 CollisionPoint.y,
+		 CollisionPoint.z);
+	  break;
+      
+	}
+    }
+}
 
 extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 {
@@ -352,15 +544,27 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       srand(time(0));
 
       // NOTE(Jovan): GJK init stuff
-      InitializeArena(&SimState->SimplexArena, Memory->PermanentStorageSize - sizeof(sdl_state),
-		      (uint8*)Memory->PermanentStorage + sizeof(sdl_state));
+      InitializeArena(&SimState->SimplexArena, Memory->TransientStorageSize,
+		      (uint8*)Memory->TransientStorage);
       SimState->Simplex = PushStruct(&SimState->SimplexArena, simplex);
       simplex* Simplex = SimState->Simplex;
       Simplex->Count = 0;
-      Simplex->Vertices = PushArray(&SimState->SimplexArena, 32, glm::vec3);
+      Simplex->Vertices = PushArray(&SimState->SimplexArena, 32, vertex);
       SimState->GJKIteration = 0;
-      Simplex->Count = 0;
 
+      SimState->Edge = PushStruct(&SimState->SimplexArena, edge);
+      edge* Edge = SimState->Edge;
+      Edge->Count = 0;
+      Edge->A = PushArray(&SimState->SimplexArena, 32, vertex);
+      Edge->B = PushArray(&SimState->SimplexArena, 32, vertex);
+      
+      SimState->Triangle = PushStruct(&SimState->SimplexArena, triangle);
+      triangle* Triangle = SimState->Triangle;
+      Triangle->Count = 0;
+      Triangle->A = PushArray(&SimState->SimplexArena, 32, vertex);
+      Triangle->B = PushArray(&SimState->SimplexArena, 32, vertex);
+      Triangle->C = PushArray(&SimState->SimplexArena, 32, vertex);
+      Triangle->N = PushArray(&SimState->SimplexArena, 32, glm::vec3);
       
       // NOTE(Jovan): Camera init
       SimState->Camera.FOV = 45.0f; 
@@ -493,8 +697,11 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // NOTE(Jovan): Physics stuff
   // --------------------------
   bool32 CollisionHappened = DetectCollisions(SimState, 0, 1, CC);
-  ResetVertices(SimState->Simplex);
-  ResolveCollision();
+  if(CollisionHappened)
+    {
+      ResolveCollision(SimState, 0, 1, CC);
+    }
+  ClearVertices(SimState->Simplex);
 
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;

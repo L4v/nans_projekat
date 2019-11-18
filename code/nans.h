@@ -47,6 +47,7 @@ typedef double real64;
 #define MAX_CUBE_COUNT 16
 #define MAX_SPHERE_COUNT 16
 #define MAX_GJK_ITERATIONS 20
+#define MAX_EPA_ERROR 0.0001f
 
 #if SLOW_BUILD
 #define Assert(Expression)			\
@@ -147,10 +148,39 @@ struct memory_arena
   memory_index Used;
 };
 
+// NOTE(Jovan): Vertex struct, for EPA mostly
+struct vertex
+{
+  glm::vec3 P;
+  glm::vec3 SupA;
+  
+  inline bool operator==(const vertex& R)
+    {
+     return ((this->P == R.P) && (this->SupA == R.SupA));
+    }
+};
+
 struct simplex
 {
   uint32 Count;
-  glm::vec3* Vertices;
+  vertex* Vertices;
+};
+
+struct edge
+{
+  uint32 Count;
+  vertex* A;
+  vertex* B;
+
+};
+
+struct triangle
+{
+  uint32 Count;
+  vertex* A;
+  vertex* B;
+  vertex* C;
+  glm::vec3* N;
 };
 
 struct sdl_camera
@@ -195,6 +225,9 @@ struct sdl_state
   // NOTE(Jovan): Vertices for the simplex
   memory_arena SimplexArena;
   simplex* Simplex;
+  edge* Edge;
+  triangle* Triangle;
+  
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
   sdl_camera Camera;
@@ -202,19 +235,6 @@ struct sdl_state
   uint32 SphereCount;
   uint32 GJKIteration;
 };
-
-//NOTE(ALEKSA): Epa
-
-struct SupportPoint
-{
-	glm::vec3 v;
-	
-	glm::vec3 supp_a;
-	glm::vec3 supp_b;
-
-	BOOL operator == (const SupportPoint &r) const { return v == r.v; }
-};
-
 
 // NOTE(Jovan): Return value for ODEs and physics functions
 // TODO(Jovan): Maybe use other method?
