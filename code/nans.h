@@ -180,7 +180,7 @@ struct triangle
   vertex* A;
   vertex* B;
   vertex* C;
-  glm::vec3* N;
+  vertex* N;
 };
 
 struct sdl_camera
