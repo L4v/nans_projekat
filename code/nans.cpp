@@ -527,7 +527,6 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 		 CollisionPoint.y,
 		 CollisionPoint.z);
 	  break;
-      
 	}
     }
 }
@@ -702,6 +701,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       ResolveCollision(SimState, 0, 1, CC);
     }
   ClearVertices(SimState->Simplex);
+  ClearTriangles(SimState->Triangle);
+  ClearEdges(SimState->Edge);
 
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
