@@ -146,7 +146,6 @@ PushEdge(edge* Edge, vertex A, vertex B)
     }
   // NOTE(Jovan): The edge didn't exist, so it's being added
   Edge->A[Edge->Count] = A;
-  // TODO IMPORTANT(L4v): Segfault here
   Edge->B[Edge->Count] = B;
   Edge->Count++;
 }
@@ -183,12 +182,16 @@ PushTriangle(triangle* Triangle, vertex A, vertex B, vertex C)
 
   // NOTE(Jovan): Calculate normal and make sure it's
   // pointing away from the origin
-  Triangle->N[Triangle->Count].P = glm::cross(Triangle->A[Triangle->Count].P,
-					    Triangle->B[Triangle->Count].P);
+  // Triangle->N[Triangle->Count] = glm::cross(Triangle->A[Triangle->Count].P,
+  // 					    Triangle->B[Triangle->Count].P);
+  Triangle->N[Triangle->Count] = glm::triangleNormal(A.P, B.P, C.P);
+  // NOTE(Jovan): Normalize vector
+  real32 Len = sqrt(glm::dot(Triangle->N[Triangle->Count], Triangle->N[Triangle->Count]));
+  Triangle->N[Triangle->Count] *= 1.0f/Len;
   glm::vec3 A0 = -1.0f * Triangle->A[Triangle->Count].P;
-  if(glm::dot(A0, Triangle->N[Triangle->Count].P) < 0)
+  if(glm::dot(A0, Triangle->N[Triangle->Count]) < 0)
     {
-      Triangle->N[Triangle->Count].P *= -1.0f;
+      Triangle->N[Triangle->Count] *= -1.0f;
     }
   
   Triangle->Count++;
@@ -418,25 +421,6 @@ DetectCollisions(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
   return Result;
 }
 
-internal uint32
-FindClosestFace(triangle* Triangle)
-{
-  uint32 Closest = 0;
-  real32 MinDistance = FLT_MAX;
-  for(uint32 TriangleIndex = 0;
-      TriangleIndex < Triangle->Count;
-      ++TriangleIndex)
-    {
-      real32 Distance = fabs(glm::dot(Triangle->N[TriangleIndex].P, Triangle->A[TriangleIndex].P));
-      if(Distance < MinDistance)
-	{
-	  MinDistance = Distance;
-	  Closest = TriangleIndex;
-	}
-    }
-  return Closest;
-}
-
 internal void
 Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
 	    real32* U, real32* V, real32* W)
@@ -479,16 +463,28 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 
       // NOTE(Jovan): Generate new point in the direction
       // of the closest triangle
-      uint32 ClosestIndex = FindClosestFace(Triangle);
-      // TODO IMPORTANT(Jovan): Distance not working?
-      real32 CurrentDistance = glm::dot(Triangle->N[ClosestIndex].P, Triangle->A[ClosestIndex].P);
-      glm::vec3 Direction = Triangle->N[ClosestIndex].P;
+      uint32 ClosestIndex = 0;
+      real32 CurrentDistance = FLT_MAX;
+      for(uint32 TriangleIndex = 0;
+	  TriangleIndex < Triangle->Count;
+	  ++TriangleIndex)
+	{
+	  real32 Distance = glm::dot(Triangle->N[TriangleIndex], Triangle->A[TriangleIndex].P);
+	  if(Distance < CurrentDistance)
+	    {
+	      CurrentDistance = Distance;
+	      ClosestIndex = TriangleIndex;
+	    }
+	}
+      printf("Dist: %f\n", CurrentDistance);
+      
+      glm::vec3 Direction = Triangle->N[ClosestIndex];
       vertex NewSupport = CalculateSupport(State, AIndex, BIndex, Direction, Type);
       // NOTE(Jovan): Removing triangle that can be "seen" by the new point
       for(uint32 TriangleIndex = 0;
 	  TriangleIndex < Triangle->Count;)
 	{
-	  if(glm::dot(Triangle->N[TriangleIndex].P, NewSupport.P - Triangle->A[TriangleIndex].P) > 0)
+	  if(glm::dot(Triangle->N[TriangleIndex], NewSupport.P - Triangle->A[TriangleIndex].P) > 0)
 	    {
 	      // NOTE(Jovan): "Disolve" the removed triangle into it's edges
 	      // and push them onto the edge list
@@ -512,19 +508,18 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
       ClearEdges(Edge);
       // NOTE(Jovan): Calculate collision point and normal as linear combination
       // of barycentric pointss
-      if(glm::dot(Triangle->N[ClosestIndex].P, NewSupport.P) - CurrentDistance < MAX_EPA_ERROR)
+      if(glm::dot(Triangle->N[ClosestIndex], NewSupport.P) - CurrentDistance < MAX_EPA_ERROR)
 	{
 	  real32 BaryU, BaryV, BaryW;
-	  Barycentric(Triangle->N[ClosestIndex].P * CurrentDistance,
+	  Barycentric(Triangle->N[ClosestIndex] * CurrentDistance,
 	  	      Triangle->A[ClosestIndex].P,
 	  	      Triangle->B[ClosestIndex].P,
 	  	      Triangle->C[ClosestIndex].P,
 	  	      &BaryU, &BaryV, &BaryW);
-	  // TODO IMPORTANT(Jovan): Getting NaN's for bary
 	  glm::vec3 CollisionPoint = (BaryU * Triangle->A[ClosestIndex].SupA +
 				      BaryV * Triangle->B[ClosestIndex].SupA +
 				      BaryW * Triangle->C[ClosestIndex].SupA);
-	  glm::vec3 CollisionNormal = -1.0f * Triangle->N[ClosestIndex].P;
+	  glm::vec3 CollisionNormal = -1.0f * Triangle->N[ClosestIndex];
 	  real32 Depth = CurrentDistance;
 
 	  printf("Point = %f, %f, %f | Depth:%f | Iteration: %d\nU: %f, V: %f, W: %f | Triangles: %d\n",
@@ -537,6 +532,8 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 		 BaryV,
 		 BaryW,
 		 Triangle->Count);
+	  State->Spheres[0].Position = CollisionPoint;
+	  //State->Cubes[0].Position += Depth * CollisionNormal;
 	  break;
 	}
     }
@@ -578,7 +575,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       Triangle->A = PushArray(&SimState->TriangleArena, 128, vertex);
       Triangle->B = PushArray(&SimState->TriangleArena, 128, vertex);
       Triangle->C = PushArray(&SimState->TriangleArena, 128, vertex);
-      Triangle->N = PushArray(&SimState->TriangleArena, 128, vertex);
+      Triangle->N = PushArray(&SimState->TriangleArena, 128, glm::vec3);
       
       // NOTE(Jovan): Camera init
       SimState->Camera.FOV = 45.0f; 
@@ -594,9 +591,9 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       
       // NOTE(Jovan): Cube init
       SimState->CubeCount = 2;
-      SimState->Cubes[0].Position = glm::vec3(0.0,
-					      2.0,
-					      0.0);
+      SimState->Cubes[0].Position = glm::vec3(2.1,
+					      0.5,
+					      2.0);
       SimState->Cubes[0].Velocity = glm::vec3(0.0);
       SimState->Cubes[0].Forces = glm::vec3(0.0);
       SimState->Cubes[0].XAngle = 0.0f;
@@ -608,7 +605,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
       
       SimState->Cubes[1].Position = glm::vec3(2.0,
-					      2.0,
+					      1.0,
 					      2.0);
       SimState->Cubes[1].Velocity = glm::vec3(0.0);
       SimState->Cubes[1].Forces = glm::vec3(0.0);

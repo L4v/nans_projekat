@@ -5,6 +5,7 @@
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/normal.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cstdio>
 #include <vector>
@@ -46,9 +47,9 @@ typedef double real64;
 #define DEFAULT_WINDOW_HEIGHT 768
 #define MAX_CUBE_COUNT 16
 #define MAX_SPHERE_COUNT 16
-#define MAX_GJK_ITERATIONS 20
+#define MAX_GJK_ITERATIONS 64
 #define MAX_EPA_ERROR 0.0001f
-#define MAX_EPA_ITERATIONS 20
+#define MAX_EPA_ITERATIONS 64
 
 #if SLOW_BUILD
 #define Assert(Expression)			\
@@ -181,7 +182,7 @@ struct triangle
   vertex* A;
   vertex* B;
   vertex* C;
-  vertex* N;
+  glm::vec3* N;
 };
 
 struct sdl_camera
