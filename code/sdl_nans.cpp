@@ -323,7 +323,7 @@ int main()
   // NOTE(Jovan): Memory allocation
   memory SimMemory = {};
   SimMemory.PermanentStorageSize = Mebibytes(64);
-  SimMemory.TransientStorageSize = Mebibytes(64);
+  SimMemory.TransientStorageSize = Mebibytes(256);
   uint64 TotalStorageSize = SimMemory.PermanentStorageSize +
     SimMemory.TransientStorageSize;
   SimMemory.PermanentStorage = mmap(0,

@@ -48,6 +48,7 @@ typedef double real64;
 #define MAX_SPHERE_COUNT 16
 #define MAX_GJK_ITERATIONS 20
 #define MAX_EPA_ERROR 0.0001f
+#define MAX_EPA_ITERATIONS 20
 
 #if SLOW_BUILD
 #define Assert(Expression)			\
@@ -224,9 +225,11 @@ struct sdl_state
 {
   // NOTE(Jovan): Vertices for the simplex
   memory_arena SimplexArena;
+  memory_arena EdgeArena;
+  memory_arena TriangleArena;
   simplex* Simplex;
-  edge* Edge;
-  triangle* Triangle;
+  edge *Edge;
+  triangle *Triangle;
   
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];

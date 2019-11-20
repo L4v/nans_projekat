@@ -1,6 +1,5 @@
 #include "nans.h"
 
-
 internal void
 SetUniformM4(uint32 ID, char* Uniform, const glm::mat4 &Mat4)
 {
@@ -428,7 +427,7 @@ FindClosestFace(triangle* Triangle)
       TriangleIndex < Triangle->Count;
       ++TriangleIndex)
     {
-      real32 Distance = glm::dot(Triangle->N[TriangleIndex].P, Triangle->A[TriangleIndex].P);
+      real32 Distance = fabs(glm::dot(Triangle->N[TriangleIndex].P, Triangle->A[TriangleIndex].P));
       if(Distance < MinDistance)
 	{
 	  MinDistance = Distance;
@@ -459,9 +458,9 @@ internal void
 ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Type)
 {
   int32 CurrIter = 0;
-  while(1)
+  while(CurrIter++ <= MAX_EPA_ITERATIONS)
     {
-      ++CurrIter;
+      printf("Iter:%d\n", CurrIter);
       simplex* Simplex = State->Simplex;
       edge* Edge = State->Edge;
       triangle* Triangle = State->Triangle;
@@ -481,10 +480,10 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
       // NOTE(Jovan): Generate new point in the direction
       // of the closest triangle
       uint32 ClosestIndex = FindClosestFace(Triangle);
+      // TODO IMPORTANT(Jovan): Distance not working?
       real32 CurrentDistance = glm::dot(Triangle->N[ClosestIndex].P, Triangle->A[ClosestIndex].P);
       glm::vec3 Direction = Triangle->N[ClosestIndex].P;
       vertex NewSupport = CalculateSupport(State, AIndex, BIndex, Direction, Type);
-
       // NOTE(Jovan): Removing triangle that can be "seen" by the new point
       for(uint32 TriangleIndex = 0;
 	  TriangleIndex < Triangle->Count;)
@@ -495,8 +494,8 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 	      // and push them onto the edge list
 	      PushEdge(Edge, Triangle->A[TriangleIndex], Triangle->B[TriangleIndex]); // AB
 	      PushEdge(Edge, Triangle->B[TriangleIndex], Triangle->C[TriangleIndex]); // BC
-	  // TODO IMPORTANT(L4v): After this push Triangle->Count freaks out
 	      PushEdge(Edge, Triangle->C[TriangleIndex], Triangle->A[TriangleIndex]); // CA
+	      RemoveTriangle(Triangle, TriangleIndex);
 	      continue;
 	    }
 	  ++TriangleIndex;
@@ -517,19 +516,22 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 	{
 	  real32 BaryU, BaryV, BaryW;
 	  Barycentric(Triangle->N[ClosestIndex].P * CurrentDistance,
-		      Triangle->A[ClosestIndex].P,
-		      Triangle->B[ClosestIndex].P,
-		      Triangle->A[ClosestIndex].P,
-		      &BaryU, &BaryV, &BaryW);
+	  	      Triangle->A[ClosestIndex].P,
+	  	      Triangle->B[ClosestIndex].P,
+	  	      Triangle->C[ClosestIndex].P,
+	  	      &BaryU, &BaryV, &BaryW);
+	  // TODO IMPORTANT(Jovan): Getting NaN's for bary
 	  glm::vec3 CollisionPoint = (BaryU * Triangle->A[ClosestIndex].SupA +
 				      BaryV * Triangle->B[ClosestIndex].SupA +
 				      BaryW * Triangle->C[ClosestIndex].SupA);
 	  glm::vec3 CollisionNormal = -1.0f * Triangle->N[ClosestIndex].P;
+	  real32 Depth = CurrentDistance;
 
-	  printf("Point = %f, %f, %f | Iteration: %d\nU: %f, V: %f, W: %f | Triangles: %d\n",
-		 CollisionNormal.x,
-		 CollisionNormal.y,
-		 CollisionNormal.z,
+	  printf("Point = %f, %f, %f | Depth:%f | Iteration: %d\nU: %f, V: %f, W: %f | Triangles: %d\n",
+		 CollisionPoint.x,
+		 CollisionPoint.y,
+		 CollisionPoint.z,
+		 Depth,
 		 CurrIter,
 		 BaryU,
 		 BaryV,
@@ -552,27 +554,31 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       srand(time(0));
 
       // NOTE(Jovan): GJK init stuff
-      InitializeArena(&SimState->SimplexArena, Memory->TransientStorageSize,
-		      (uint8*)Memory->TransientStorage);
+      InitializeArena(&SimState->SimplexArena, Memory->PermanentStorageSize - sizeof(sdl_state),
+		      (uint8*)Memory->PermanentStorage + sizeof(sdl_state));
       SimState->Simplex = PushStruct(&SimState->SimplexArena, simplex);
       simplex* Simplex = SimState->Simplex;
       Simplex->Count = 0;
       Simplex->Vertices = PushArray(&SimState->SimplexArena, 64, vertex);
       SimState->GJKIteration = 0;
 
-      SimState->Edge = PushStruct(&SimState->SimplexArena, edge);
+      InitializeArena(&SimState->EdgeArena, Memory->TransientStorageSize / 2,
+		      (uint8*)Memory->TransientStorage);
+      SimState->Edge = PushStruct(&SimState->EdgeArena, edge);
       edge* Edge = SimState->Edge;
       Edge->Count = 0;
-      Edge->A = PushArray(&SimState->SimplexArena, 32, vertex);
-      Edge->B = PushArray(&SimState->SimplexArena, 32, vertex);
-      
-      SimState->Triangle = PushStruct(&SimState->SimplexArena, triangle);
+      Edge->A = PushArray(&SimState->EdgeArena, 32, vertex);
+      Edge->B = PushArray(&SimState->EdgeArena, 32, vertex);
+
+      InitializeArena(&SimState->TriangleArena, Memory->TransientStorageSize / 2,
+		      (uint8*)Memory->TransientStorage + Memory->TransientStorageSize / 2);
+      SimState->Triangle = PushStruct(&SimState->TriangleArena, triangle);
       triangle* Triangle = SimState->Triangle;
       Triangle->Count = 0;
-      Triangle->A = PushArray(&SimState->SimplexArena, 128, vertex);
-      Triangle->B = PushArray(&SimState->SimplexArena, 128, vertex);
-      Triangle->C = PushArray(&SimState->SimplexArena, 128, vertex);
-      Triangle->N = PushArray(&SimState->SimplexArena, 128, vertex);
+      Triangle->A = PushArray(&SimState->TriangleArena, 128, vertex);
+      Triangle->B = PushArray(&SimState->TriangleArena, 128, vertex);
+      Triangle->C = PushArray(&SimState->TriangleArena, 128, vertex);
+      Triangle->N = PushArray(&SimState->TriangleArena, 128, vertex);
       
       // NOTE(Jovan): Camera init
       SimState->Camera.FOV = 45.0f; 
