@@ -220,6 +220,10 @@ SDLHandleEvent(SDL_Event* Event, sdl_input* Input, bool32* InFocus)
 	      {
 		SDLProcessSimKeyboardButton(&Input->KeyboardController.DebugBack, IsDown);
 	      }
+	    else if(KeyCode == SDLK_r)
+	      {
+		SDLProcessSimKeyboardButton(&Input->KeyboardController.DebugReset, IsDown);
+	      }
 	    else if(KeyCode == SDLK_ESCAPE)
 	      {
 		ShouldQuit = 1;

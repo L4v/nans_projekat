@@ -97,7 +97,7 @@ struct sdl_keyboard
 {
   union
   {
-    sdl_button_state Buttons[11];
+    sdl_button_state Buttons[12];
     struct{
       sdl_button_state MoveForward;
       sdl_button_state MoveBack;
@@ -112,6 +112,7 @@ struct sdl_keyboard
       sdl_button_state DebugRight;
       sdl_button_state DebugForward;
       sdl_button_state DebugBack;
+      sdl_button_state DebugReset;
     };
   };
 };
@@ -158,7 +159,7 @@ struct vertex
   
   inline bool operator==(const vertex& R)
     {
-     return ((this->P == R.P) && (this->SupA == R.SupA));
+     return (this->P == R.P);
     }
 };
 
@@ -190,6 +191,7 @@ struct sdl_camera
   real32 FOV;
   real32 Pitch;
   real32 Yaw;
+  real32 Speed;
   
   glm::vec3 Position;
   glm::vec3 Target;

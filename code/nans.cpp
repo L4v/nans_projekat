@@ -89,6 +89,65 @@ CubeClearForces(sdl_state* State, int32 CubeIndex)
   State->Cubes[CubeIndex].Forces = glm::vec3(0.0);
 };
 
+
+internal void
+HandleInput(sdl_state* State, sdl_input* Input, real32 dt)
+{
+
+  if(Input->KeyboardController.MoveForward.EndedDown)
+    {
+      State->Camera.Position += State->Camera.Speed * State->Camera.Front;
+    }
+  if(Input->KeyboardController.MoveLeft.EndedDown)
+    {
+      State->Camera.Position -= glm::normalize(glm::cross(State->Camera.Front, State->Camera.Up)) * State->Camera.Speed;
+    }
+  if(Input->KeyboardController.MoveBack.EndedDown)
+    {
+      State->Camera.Position -= State->Camera.Speed * State->Camera.Front;
+    }
+  if(Input->KeyboardController.MoveRight.EndedDown)
+    {
+      State->Camera.Position += glm::normalize(glm::cross(State->Camera.Front, State->Camera.Up)) * State->Camera.Speed;
+    }
+  if(Input->KeyboardController.ShootAction.EndedDown)
+    {
+      CubeAddForce(State, 0, 20.0f * State->Camera.Front);
+    }
+  if(Input->KeyboardController.DebugLeft.EndedDown)
+    {
+      State->Cubes[0].Position += dt * glm::vec3(1.0, 0.0, 0.0);
+    }
+  if(Input->KeyboardController.DebugRight.EndedDown)
+    {
+      State->Cubes[0].Position += dt * glm::vec3(-1.0, 0.0, 0.0);
+    }
+  if(Input->KeyboardController.DebugUp.EndedDown)
+    {
+      State->Cubes[0].Position += dt * glm::vec3(0.0, 1.0, 0.0);
+    }
+  if(Input->KeyboardController.DebugDown.EndedDown)
+    {
+      State->Cubes[0].Position += dt * glm::vec3(0.0, -1.0, 0.0);
+    }
+  if(Input->KeyboardController.DebugForward.EndedDown)
+    {
+      State->Cubes[0].Position += dt * glm::vec3(0.0, 0.0, 1.0);
+    }
+  if(Input->KeyboardController.DebugBack.EndedDown)
+    {
+      State->Cubes[0].Position += dt * glm::vec3(0.0, 0.0, -1.0);
+    }
+  // TODO(Jovan): Temp
+  if(Input->KeyboardController.DebugReset.EndedDown)
+    {
+      State->Cubes[0].Position = glm::vec3(2.0, 3.0, 2.0);
+      State->Cubes[0].Velocity = glm::vec3(0.0f);
+      State->Cubes[1].Position = glm::vec3(2.0, 1.0, 2.0);
+      State->Cubes[1].Velocity = glm::vec3(0.0f);
+    }
+}
+
 internal void
 RemoveVertex(simplex* Simplex, uint32 VertexIndex)
 {
@@ -182,8 +241,6 @@ PushTriangle(triangle* Triangle, vertex A, vertex B, vertex C)
 
   // NOTE(Jovan): Calculate normal and make sure it's
   // pointing away from the origin
-  // Triangle->N[Triangle->Count] = glm::cross(Triangle->A[Triangle->Count].P,
-  // 					    Triangle->B[Triangle->Count].P);
   Triangle->N[Triangle->Count] = glm::triangleNormal(A.P, B.P, C.P);
   // NOTE(Jovan): Normalize vector
   real32 Len = sqrt(glm::dot(Triangle->N[Triangle->Count], Triangle->N[Triangle->Count]));
@@ -341,13 +398,13 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
     case 4:
       {
 	// NOTE(Jovan): 3 edges of interest
-	// glm::vec3 DA = Simplex->Vertices[3] - Simplex->Vertices[0];
-	// glm::vec3 DB = Simplex->Vertices[3] - Simplex->Vertices[1];
-	// glm::vec3 DC = Simplex->Vertices[3] - Simplex->Vertices[2];
+	glm::vec3 DA = Simplex->Vertices[3].P - Simplex->Vertices[0].P;
+	glm::vec3 DB = Simplex->Vertices[3].P - Simplex->Vertices[1].P;
+	glm::vec3 DC = Simplex->Vertices[3].P - Simplex->Vertices[2].P;
 
-	glm::vec3 DA = Simplex->Vertices[0].P - Simplex->Vertices[3].P;
-	glm::vec3 DB = Simplex->Vertices[1].P - Simplex->Vertices[3].P;
-	glm::vec3 DC = Simplex->Vertices[2].P - Simplex->Vertices[3].P;
+	// glm::vec3 DA = Simplex->Vertices[0].P - Simplex->Vertices[3].P;
+	// glm::vec3 DB = Simplex->Vertices[1].P - Simplex->Vertices[3].P;
+	// glm::vec3 DC = Simplex->Vertices[2].P - Simplex->Vertices[3].P;
 	
 	// NOTE(Jovan): Dir to the origin
 	glm::vec3 D0 = -1.0f * Simplex->Vertices[3].P;
@@ -425,7 +482,6 @@ internal void
 Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
 	    real32* U, real32* V, real32* W)
 {
-  // TODO(Jovan): Use State?
   glm::vec3 V0 = B - A, V1 = C - A, V2 = P - A;
   real32 D00 = glm::dot(V0, V0);
   real32 D01 = glm::dot(V0, V1);
@@ -469,6 +525,7 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 	  TriangleIndex < Triangle->Count;
 	  ++TriangleIndex)
 	{
+	  // TODO(Jovan): Distance isn't being properly calculated probably?
 	  real32 Distance = glm::dot(Triangle->N[TriangleIndex], Triangle->A[TriangleIndex].P);
 	  if(Distance < CurrentDistance)
 	    {
@@ -476,6 +533,7 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 	      ClosestIndex = TriangleIndex;
 	    }
 	}
+      CurrentDistance = glm::abs(CurrentDistance);
       printf("Dist: %f\n", CurrentDistance);
       
       glm::vec3 Direction = Triangle->N[ClosestIndex];
@@ -508,7 +566,7 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
       ClearEdges(Edge);
       // NOTE(Jovan): Calculate collision point and normal as linear combination
       // of barycentric pointss
-      if(glm::dot(Triangle->N[ClosestIndex], NewSupport.P) - CurrentDistance < MAX_EPA_ERROR)
+      if(glm::dot(Triangle->N[ClosestIndex], NewSupport.P) - CurrentDistance <= MAX_EPA_ERROR)
 	{
 	  real32 BaryU, BaryV, BaryW;
 	  Barycentric(Triangle->N[ClosestIndex] * CurrentDistance,
@@ -516,9 +574,9 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 	  	      Triangle->B[ClosestIndex].P,
 	  	      Triangle->C[ClosestIndex].P,
 	  	      &BaryU, &BaryV, &BaryW);
-	  glm::vec3 CollisionPoint = (BaryU * Triangle->A[ClosestIndex].SupA +
-				      BaryV * Triangle->B[ClosestIndex].SupA +
-				      BaryW * Triangle->C[ClosestIndex].SupA);
+	  glm::vec3 CollisionPoint = ((BaryU * Triangle->A[ClosestIndex].SupA) +
+				      (BaryV * Triangle->B[ClosestIndex].SupA) +
+				      (BaryW * Triangle->C[ClosestIndex].SupA));
 	  glm::vec3 CollisionNormal = -1.0f * Triangle->N[ClosestIndex];
 	  real32 Depth = CurrentDistance;
 
@@ -533,8 +591,28 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 		 BaryW,
 		 Triangle->Count);
 	  State->Spheres[0].Position = CollisionPoint;
-	  //State->Cubes[0].Position += Depth * CollisionNormal;
+
+	  // NOTE(Jovan): Impulse test
+	  // -------------------------
+	  real32 InvA = 1.0f / (real32)State->Cubes[0].Mass;
+	  real32 InvB = 1.0f / (real32)State->Cubes[1].Mass;
+	  real32 MassA = (real32)State->Cubes[0].Mass;
+	  real32 MassB = (real32)State->Cubes[1].Mass;
+	  // NOTE(Jovan): Coefficient of restitution
+	  real32 e = 0.01f;
+	  glm::vec3 RelativeAtoB = State->Cubes[0].Velocity + State->Cubes[0].Velocity;
+	  real32 Impulse = (-(1.0f + e) * (glm::dot(RelativeAtoB, CollisionNormal))) /
+	    (InvA + InvB);
+
+	  State->Cubes[0].Velocity -= InvA * Impulse;
+	  State->Cubes[1].Velocity += InvB * Impulse;
+	  
+
+	  // NOTE(Jovan): End impulse test
+	  // ----------------------------
+	  
 	  break;
+
 	}
     }
 }
@@ -581,6 +659,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.FOV = 45.0f; 
       SimState->Camera.Pitch = 0.0f;
       SimState->Camera.Yaw = -90.0f;
+      SimState->Camera.Speed = 0.05f;
+      
       SimState->Camera.Position = glm::vec3(0.0f, 0.0f, 3.0f);
       glm::vec3 Up = glm::vec3(0.0f, 1.0f, 0.0f);
       SimState->Camera.Target = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -592,7 +672,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       // NOTE(Jovan): Cube init
       SimState->CubeCount = 2;
       SimState->Cubes[0].Position = glm::vec3(2.1,
-					      0.5,
+					      2.5,
 					      2.0);
       SimState->Cubes[0].Velocity = glm::vec3(0.0);
       SimState->Cubes[0].Forces = glm::vec3(0.0);
@@ -648,53 +728,10 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   
   UpdateCamera(SimState, Input);
 
+  HandleInput(SimState, Input, dt);
+  
   // NOTE(Jovan): Input
   // ------------------
-  real32 CameraSpeed = 0.05f;
-  if(Input->KeyboardController.MoveForward.EndedDown)
-    {
-      SimState->Camera.Position += CameraSpeed * SimState->Camera.Front;
-    }
-  if(Input->KeyboardController.MoveLeft.EndedDown)
-    {
-      SimState->Camera.Position -= glm::normalize(glm::cross(SimState->Camera.Front, SimState->Camera.Up)) * CameraSpeed;
-    }
-  if(Input->KeyboardController.MoveBack.EndedDown)
-    {
-      SimState->Camera.Position -= CameraSpeed * SimState->Camera.Front;
-    }
-  if(Input->KeyboardController.MoveRight.EndedDown)
-    {
-      SimState->Camera.Position += glm::normalize(glm::cross(SimState->Camera.Front, SimState->Camera.Up)) * CameraSpeed;
-    }
-  if(Input->KeyboardController.ShootAction.EndedDown)
-    {
-      CubeAddForce(SimState, 0, 20.0f * SimState->Camera.Front);
-    }
-  if(Input->KeyboardController.DebugLeft.EndedDown)
-    {
-      SimState->Cubes[0].Position += dt * glm::vec3(1.0, 0.0, 0.0);
-    }
-  if(Input->KeyboardController.DebugRight.EndedDown)
-    {
-      SimState->Cubes[0].Position += dt * glm::vec3(-1.0, 0.0, 0.0);
-    }
-  if(Input->KeyboardController.DebugUp.EndedDown)
-    {
-      SimState->Cubes[0].Position += dt * glm::vec3(0.0, 1.0, 0.0);
-    }
-  if(Input->KeyboardController.DebugDown.EndedDown)
-    {
-      SimState->Cubes[0].Position += dt * glm::vec3(0.0, -1.0, 0.0);
-    }
-  if(Input->KeyboardController.DebugForward.EndedDown)
-    {
-      SimState->Cubes[0].Position += dt * glm::vec3(0.0, 0.0, 1.0);
-    }
-  if(Input->KeyboardController.DebugBack.EndedDown)
-    {
-      SimState->Cubes[0].Position += dt * glm::vec3(0.0, 0.0, -1.0);
-    }
 
   // TODO(Add normal constraint)
   if(SimState->Camera.Position.y < 0.5)
@@ -716,6 +753,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   ClearTriangles(SimState->Triangle);
   ClearEdges(SimState->Edge);
 
+  //  CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
       ++CubeIndex)
@@ -749,6 +788,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SetUniformM4(Render->Shaders[2], "Projection", Projection);
   real32 LineLength = 100.0f;
   glm::vec3 LineColor = glm::vec3(0.0);
+  
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
       ++CubeIndex)
