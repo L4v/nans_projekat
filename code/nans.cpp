@@ -141,9 +141,9 @@ HandleInput(sdl_state* State, sdl_input* Input, real32 dt)
   // TODO(Jovan): Temp
   if(Input->KeyboardController.DebugReset.EndedDown)
     {
-      State->Cubes[0].Position = glm::vec3(2.0, 3.0, 2.0);
+      State->Cubes[0].Position = glm::vec3(2.0, 1.0, 2.0);
       State->Cubes[0].Velocity = glm::vec3(0.0f);
-      State->Cubes[1].Position = glm::vec3(2.0, 1.0, 2.0);
+      State->Cubes[1].Position = glm::vec3(2.0, 3.0, 2.0);
       State->Cubes[1].Velocity = glm::vec3(0.0f);
     }
 }
@@ -590,7 +590,7 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 		 BaryV,
 		 BaryW,
 		 Triangle->Count);
-	  State->Spheres[0].Position = CollisionPoint;
+	  //	  State->Spheres[0].Position = CollisionPoint;
 
 	  // NOTE(Jovan): Impulse test
 	  // -------------------------
@@ -604,8 +604,8 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 	  real32 Impulse = (-(1.0f + e) * (glm::dot(RelativeAtoB, CollisionNormal))) /
 	    (InvA + InvB);
 
-	  State->Cubes[0].Velocity -= InvA * Impulse;
-	  State->Cubes[1].Velocity += InvB * Impulse;
+	  State->Cubes[0].Velocity += InvA * (Impulse * CollisionNormal) ;
+	  State->Cubes[1].Velocity -= InvB * (Impulse * CollisionNormal);
 	  
 
 	  // NOTE(Jovan): End impulse test
