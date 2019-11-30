@@ -70,11 +70,15 @@ MovementFunction(glm::vec3 Velocity, glm::vec3 SummedForces, real32 Mass)
   return Result;
 }
 
-internal void
-RotationFunction()
+internal phys_return
+RotationFunction(glm::vec3 RotVelocity, glm::vec3 SummedTorque, real32 MomentOfInertia)
 {
   // TODO(Jovan): Implement
   // ubrzanje = 1/m (...);
+  phys_return Result = {};
+  Result.X = RotVelocity;
+  Result.Y = (real32)(1.0f / MomentOfInertia) * (SummedTorque - GLOBAL_FRICTION * RotVelocity);
+  return Result;
 }
 
 internal void
@@ -238,16 +242,17 @@ PushTriangle(triangle* Triangle, vertex A, vertex B, vertex C)
   Triangle->A[Triangle->Count] = A;
   Triangle->B[Triangle->Count] = B;
   Triangle->C[Triangle->Count] = C;
-
+  
   // NOTE(Jovan): Calculate normal and make sure it's
   // pointing away from the origin
-  Triangle->N[Triangle->Count] = glm::triangleNormal(A.P, B.P, C.P);
+  Triangle->N[Triangle->Count] = glm::cross(B.P - A.P, C.P - A.P);//glm::triangleNormal(A.P, B.P, C.P);
   // NOTE(Jovan): Normalize vector
   real32 Len = sqrt(glm::dot(Triangle->N[Triangle->Count], Triangle->N[Triangle->Count]));
   Triangle->N[Triangle->Count] *= 1.0f/Len;
   glm::vec3 A0 = -1.0f * Triangle->A[Triangle->Count].P;
   if(glm::dot(A0, Triangle->N[Triangle->Count]) < 0)
     {
+      printf("Turned around\n");
       Triangle->N[Triangle->Count] *= -1.0f;
     }
   
@@ -263,6 +268,7 @@ ClearTriangles(triangle* Triangle)
 internal void
 UpdateVertices(sdl_state* State, int32 CubeIndex)
 {
+  // TODO(Jovan): Handle rotation
   real32 Size = State->Cubes[CubeIndex].Size;
   State->Cubes[CubeIndex].Vertices[0] = State->Cubes[CubeIndex].Position +
     Size / 2.0f * glm::vec3(1.0, 1.0, 1.0);
@@ -302,6 +308,17 @@ GetCubeSupport(sdl_state* State, int32 CubeIndex, glm::vec3 Direction)
 	}
     }
 
+  return Result;
+}
+
+internal glm::vec3
+GetSphereSupport(sdl_state* State, int32 SphereIndex, glm::vec3 Direction)
+{
+  real32 MaxDistance = -FLT_MAX;
+  glm::vec3 Result = glm::vec3(0.0f);
+  sphere* Sphere = &State->Spheres[SphereIndex];
+  Result = Sphere->Position + Sphere->Radius * Direction;
+  
   return Result;
 }
 
@@ -398,13 +415,13 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
     case 4:
       {
 	// NOTE(Jovan): 3 edges of interest
-	glm::vec3 DA = Simplex->Vertices[3].P - Simplex->Vertices[0].P;
-	glm::vec3 DB = Simplex->Vertices[3].P - Simplex->Vertices[1].P;
-	glm::vec3 DC = Simplex->Vertices[3].P - Simplex->Vertices[2].P;
+	// glm::vec3 DA = Simplex->Vertices[3].P - Simplex->Vertices[0].P;
+	// glm::vec3 DB = Simplex->Vertices[3].P - Simplex->Vertices[1].P;
+	// glm::vec3 DC = Simplex->Vertices[3].P - Simplex->Vertices[2].P;
 
-	// glm::vec3 DA = Simplex->Vertices[0].P - Simplex->Vertices[3].P;
-	// glm::vec3 DB = Simplex->Vertices[1].P - Simplex->Vertices[3].P;
-	// glm::vec3 DC = Simplex->Vertices[2].P - Simplex->Vertices[3].P;
+	glm::vec3 DA = Simplex->Vertices[0].P - Simplex->Vertices[3].P;
+	glm::vec3 DB = Simplex->Vertices[1].P - Simplex->Vertices[3].P;
+	glm::vec3 DC = Simplex->Vertices[2].P - Simplex->Vertices[3].P;
 	
 	// NOTE(Jovan): Dir to the origin
 	glm::vec3 D0 = -1.0f * Simplex->Vertices[3].P;
@@ -494,20 +511,17 @@ Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
   *U = 1.0f - *V - *W;
 }
 
-internal void
+internal int32
 ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Type)
 {
   int32 CurrIter = 0;
   while(CurrIter++ <= MAX_EPA_ITERATIONS)
     {
-      printf("Iter:%d\n", CurrIter);
       simplex* Simplex = State->Simplex;
       edge* Edge = State->Edge;
       triangle* Triangle = State->Triangle;
 
       Assert(Simplex->Count >= 4);
-      // TODO(Jovan): Maybe use already loaded points for simplex
-      // and just push triangles from their indices?
       vertex A = Simplex->Vertices[0];
       vertex B = Simplex->Vertices[1];
       vertex C = Simplex->Vertices[2];
@@ -590,8 +604,6 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 		 BaryV,
 		 BaryW,
 		 Triangle->Count);
-	  //	  State->Spheres[0].Position = CollisionPoint;
-
 	  // NOTE(Jovan): Impulse test
 	  // -------------------------
 	  real32 InvA = 1.0f / (real32)State->Cubes[0].Mass;
@@ -606,7 +618,7 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 
 	  State->Cubes[0].Velocity += InvA * (Impulse * CollisionNormal) ;
 	  State->Cubes[1].Velocity -= InvB * (Impulse * CollisionNormal);
-	  
+	  return ClosestIndex;
 
 	  // NOTE(Jovan): End impulse test
 	  // ----------------------------
@@ -615,6 +627,7 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 
 	}
     }
+  return -1;
 }
 
 extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
@@ -745,13 +758,12 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // NOTE(Jovan): Physics stuff
   // --------------------------
   bool32 CollisionHappened = DetectCollisions(SimState, 0, 1, CC);
+  int32 Closest = -1;
   if(CollisionHappened)
     {
-      ResolveCollision(SimState, 0, 1, CC);
+      Closest = ResolveCollision(SimState, 0, 1, CC);
     }
-  ClearVertices(SimState->Simplex);
-  ClearTriangles(SimState->Triangle);
-  ClearEdges(SimState->Edge);
+
 
   //  CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   
@@ -788,7 +800,54 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SetUniformM4(Render->Shaders[2], "Projection", Projection);
   real32 LineLength = 100.0f;
   glm::vec3 LineColor = glm::vec3(0.0);
-  
+
+  // NOTE(Jovan): TEST
+  // ----------------
+  SimState->Spheres[0].Position = glm::vec3(0.0);
+  SimState->Spheres[0].Radius = 0.05;
+  for(uint32 TriangleIndex = 0;
+      TriangleIndex < SimState->Triangle->Count;
+      ++TriangleIndex)
+    {
+      real32 vertices[] =
+	{
+	 SimState->Triangle->A[TriangleIndex].P.x, SimState->Triangle->A[TriangleIndex].P.y, SimState->Triangle->A[TriangleIndex].P.z,    
+	 SimState->Triangle->B[TriangleIndex].P.x, SimState->Triangle->B[TriangleIndex].P.y, SimState->Triangle->B[TriangleIndex].P.z,
+	 SimState->Triangle->C[TriangleIndex].P.x, SimState->Triangle->C[TriangleIndex].P.y, SimState->Triangle->C[TriangleIndex].P.z,
+	 SimState->Triangle->A[TriangleIndex].P.x, SimState->Triangle->A[TriangleIndex].P.y, SimState->Triangle->A[TriangleIndex].P.z,
+	};
+      glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
+      Model = glm::mat4(1.0);
+      SetUniformM4(Render->Shaders[2], "Model", Model);
+      LineColor = glm::vec3(1.0f, 0.0f, 1.0f);
+      SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
+      glBindVertexArray(Render->VAOs[3]);
+      glDrawArrays(GL_LINE_STRIP, 0, 4);
+    }
+
+  if(Closest != -1)
+    {
+      real32 X = SimState->Triangle->N[Closest].x;
+      real32 Y = SimState->Triangle->N[Closest].y;
+      real32 Z = SimState->Triangle->N[Closest].z;
+      real32 vertices[] =
+	{
+	 0, 0, 0,
+	 X, Y, Z
+	};
+      glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
+      Model = glm::mat4(1.0);
+      SetUniformM4(Render->Shaders[2], "Model", Model);
+      LineColor = glm::vec3(1.0f, 0.0f, 1.0f);
+      SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
+      glBindVertexArray(Render->VAOs[3]);
+      glDrawArrays(GL_LINE_STRIP, 0, 2);
+    }
+  // NOTE(Jovan): End test
+  // ---------------------
+#if 0
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
       ++CubeIndex)
@@ -828,8 +887,10 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 	  glDrawArrays(GL_LINES, 0, 6);
 	}
     }
+#endif
   glBindVertexArray(0);
-  
+
+#if 0
   // NOTE(Jovan): Floor drawing
   // --------------------------
 
@@ -851,6 +912,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // ------------------------------
   SetUniformM4(Render->Shaders[0], "View", View);
   SetUniformM4(Render->Shaders[0], "Projection", Projection);
+#endif 
   
   // NOTE(Jovan): Cube drawing
   // -------------------------
@@ -875,7 +937,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 					  SimState->Cubes[CubeIndex].Size));
       SetUniformM4(Render->Shaders[0], "Model", Model);
       glBindVertexArray(Render->VAOs[0]);
-      glDrawArrays(GL_TRIANGLES, 0, 36);
+      glDrawArrays(GL_LINE_STRIP, 0, 36);
     }
 #endif
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -908,7 +970,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 					  SimState->Spheres[SphereIndex].Radius));
       SetUniformM4(Render->Shaders[1], "Model", Model);
       glBindVertexArray(Render->VAOs[1]);
-      glDrawElements(GL_TRIANGLES, Render->Num,  GL_UNSIGNED_INT, Render->Indices);
+      glDrawElements(GL_LINE_STRIP, Render->Num,  GL_UNSIGNED_INT, Render->Indices);
     }
   glBindVertexArray(0);
 #endif
@@ -916,6 +978,9 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // NOTE(Jovan): End sphere drawing
   // -------------------------------
 
+  ClearVertices(SimState->Simplex);
+  ClearTriangles(SimState->Triangle);
+  ClearEdges(SimState->Edge);
   // NOTE(Jovan): Logging
   // --------------------
 

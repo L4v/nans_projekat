@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <vector>
 #include <time.h>
+#include <cmath>
 
 #define internal static
 #define global_variable static
