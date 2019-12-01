@@ -2,7 +2,8 @@
 mkdir -p ../build
 pushd ../build
 
-CompilerFlags=( -DSLOW_BUILD
+CompilerFlags=( -DSLOW_BUILD -DDRAW_SPHERES -DDRAW_CUBES -DDRAW_FLOOR -DDRAW_COORDINATES
+		-DDRAW_EPA=0 -DDRAW_WIRE
 		-Wall -Werror -Wl,-rpath,'$ORIGIN'
 		-Wno-unused-function -Wno-write-strings -Wno-unused-variable -g -Wno-null-dereference
 		-Wno-unused-but-set-variable)

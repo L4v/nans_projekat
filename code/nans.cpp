@@ -252,7 +252,6 @@ PushTriangle(triangle* Triangle, vertex A, vertex B, vertex C)
   glm::vec3 A0 = -1.0f * Triangle->A[Triangle->Count].P;
   if(glm::dot(A0, Triangle->N[Triangle->Count]) < 0)
     {
-      printf("Turned around\n");
       Triangle->N[Triangle->Count] *= -1.0f;
     }
   
@@ -512,7 +511,7 @@ Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
 }
 
 internal int32
-ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Type)
+ResolveCollision(sdl_state* State, sdl_input* Input, int32 AIndex, int32 BIndex, collision_type Type)
 {
   int32 CurrIter = 0;
   while(CurrIter++ <= MAX_EPA_ITERATIONS)
@@ -535,28 +534,87 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
       // of the closest triangle
       uint32 ClosestIndex = 0;
       real32 CurrentDistance = FLT_MAX;
+
+      // TODO(Jovan): FOR DEBUGGING ONLY
+      // while(!Input->KeyboardController.DebugContinue.EndedDown)
+      // 	{
+      // 	  return -1;
+      // 	}
+      //
+
       for(uint32 TriangleIndex = 0;
 	  TriangleIndex < Triangle->Count;
 	  ++TriangleIndex)
 	{
 	  // TODO(Jovan): Distance isn't being properly calculated probably?
-	  real32 Distance = glm::dot(Triangle->N[TriangleIndex], Triangle->A[TriangleIndex].P);
+	  real32 Distance = glm::abs(glm::dot(Triangle->N[TriangleIndex], Triangle->A[TriangleIndex].P));
 	  if(Distance < CurrentDistance)
 	    {
 	      CurrentDistance = Distance;
 	      ClosestIndex = TriangleIndex;
 	    }
 	}
-      CurrentDistance = glm::abs(CurrentDistance);
-      printf("Dist: %f\n", CurrentDistance);
       
       glm::vec3 Direction = Triangle->N[ClosestIndex];
       vertex NewSupport = CalculateSupport(State, AIndex, BIndex, Direction, Type);
+
+
+      // NOTE(Jovan): Calculate collision point and normal as linear combination
+      // of barycentric pointss
+      if(glm::dot(-Triangle->N[ClosestIndex], NewSupport.P) - CurrentDistance <= MAX_EPA_ERROR)
+	{
+	  real32 BaryU, BaryV, BaryW;
+	  Barycentric(Triangle->N[ClosestIndex] * CurrentDistance,
+	  	      Triangle->A[ClosestIndex].P,
+	  	      Triangle->B[ClosestIndex].P,
+	  	      Triangle->C[ClosestIndex].P,
+	  	      &BaryU, &BaryV, &BaryW);
+	  glm::vec3 CollisionPoint = ((BaryU * Triangle->A[ClosestIndex].SupA) +
+				      (BaryV * Triangle->B[ClosestIndex].SupA) +
+				      (BaryW * Triangle->C[ClosestIndex].SupA));
+	  glm::vec3 CollisionNormal = -1.0f * Triangle->N[ClosestIndex];
+	  real32 Depth = CurrentDistance;
+	  State->Depth = Depth;
+
+	  // TODO(Jovan): Logging remove
+	  printf("Point = %f, %f, %f | Depth:%f | Iteration: %d\nU: %f, V: %f, W: %f | Triangles: %d\n",
+		 CollisionPoint.x,
+		 CollisionPoint.y,
+		 CollisionPoint.z,
+		 Depth,
+		 CurrIter,
+		 BaryU,
+		 BaryV,
+		 BaryW,
+		 Triangle->Count);
+	  State->Spheres[0].Position = CollisionPoint;
+	  // NOTE(Jovan): Impulse test
+	  // -------------------------
+	  real32 InvA = 1.0f / (real32)State->Cubes[0].Mass;
+	  real32 InvB = 1.0f / (real32)State->Cubes[1].Mass;
+	  real32 MassA = (real32)State->Cubes[0].Mass;
+	  real32 MassB = (real32)State->Cubes[1].Mass;
+	  // NOTE(Jovan): Coefficient of restitution
+	  real32 e = 0.01f;
+	  glm::vec3 RelativeAtoB = State->Cubes[0].Velocity + State->Cubes[0].Velocity;
+	  real32 Impulse = (-(1.0f + e) * (glm::dot(RelativeAtoB, CollisionNormal))) /
+	    (InvA + InvB);
+
+	  State->Cubes[0].Velocity += InvA * (Impulse * CollisionNormal) ;
+	  State->Cubes[1].Velocity -= InvB * (Impulse * CollisionNormal);
+	  return ClosestIndex;
+
+	  // NOTE(Jovan): End impulse test
+	  // ----------------------------
+	  
+	  break;
+	}
+      
       // NOTE(Jovan): Removing triangle that can be "seen" by the new point
       for(uint32 TriangleIndex = 0;
 	  TriangleIndex < Triangle->Count;)
 	{
-	  if(glm::dot(Triangle->N[TriangleIndex], NewSupport.P - Triangle->A[TriangleIndex].P) > 0)
+	  if(glm::dot(-Triangle->N[TriangleIndex], NewSupport.P - Triangle->A[TriangleIndex].P) > 0)
 	    {
 	      // NOTE(Jovan): "Disolve" the removed triangle into it's edges
 	      // and push them onto the edge list
@@ -578,54 +636,7 @@ ResolveCollision(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 	}
       // NOTE(Jovan): Clear the edge list
       ClearEdges(Edge);
-      // NOTE(Jovan): Calculate collision point and normal as linear combination
-      // of barycentric pointss
-      if(glm::dot(Triangle->N[ClosestIndex], NewSupport.P) - CurrentDistance <= MAX_EPA_ERROR)
-	{
-	  real32 BaryU, BaryV, BaryW;
-	  Barycentric(Triangle->N[ClosestIndex] * CurrentDistance,
-	  	      Triangle->A[ClosestIndex].P,
-	  	      Triangle->B[ClosestIndex].P,
-	  	      Triangle->C[ClosestIndex].P,
-	  	      &BaryU, &BaryV, &BaryW);
-	  glm::vec3 CollisionPoint = ((BaryU * Triangle->A[ClosestIndex].SupA) +
-				      (BaryV * Triangle->B[ClosestIndex].SupA) +
-				      (BaryW * Triangle->C[ClosestIndex].SupA));
-	  glm::vec3 CollisionNormal = -1.0f * Triangle->N[ClosestIndex];
-	  real32 Depth = CurrentDistance;
-
-	  printf("Point = %f, %f, %f | Depth:%f | Iteration: %d\nU: %f, V: %f, W: %f | Triangles: %d\n",
-		 CollisionPoint.x,
-		 CollisionPoint.y,
-		 CollisionPoint.z,
-		 Depth,
-		 CurrIter,
-		 BaryU,
-		 BaryV,
-		 BaryW,
-		 Triangle->Count);
-	  // NOTE(Jovan): Impulse test
-	  // -------------------------
-	  real32 InvA = 1.0f / (real32)State->Cubes[0].Mass;
-	  real32 InvB = 1.0f / (real32)State->Cubes[1].Mass;
-	  real32 MassA = (real32)State->Cubes[0].Mass;
-	  real32 MassB = (real32)State->Cubes[1].Mass;
-	  // NOTE(Jovan): Coefficient of restitution
-	  real32 e = 0.01f;
-	  glm::vec3 RelativeAtoB = State->Cubes[0].Velocity + State->Cubes[0].Velocity;
-	  real32 Impulse = (-(1.0f + e) * (glm::dot(RelativeAtoB, CollisionNormal))) /
-	    (InvA + InvB);
-
-	  State->Cubes[0].Velocity += InvA * (Impulse * CollisionNormal) ;
-	  State->Cubes[1].Velocity -= InvB * (Impulse * CollisionNormal);
-	  return ClosestIndex;
-
-	  // NOTE(Jovan): End impulse test
-	  // ----------------------------
-	  
-	  break;
-
-	}
+      
     }
   return -1;
 }
@@ -761,7 +772,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   int32 Closest = -1;
   if(CollisionHappened)
     {
-      Closest = ResolveCollision(SimState, 0, 1, CC);
+      Closest = ResolveCollision(SimState, Input,  0, 1, CC);
     }
 
 
@@ -801,10 +812,9 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   real32 LineLength = 100.0f;
   glm::vec3 LineColor = glm::vec3(0.0);
 
-  // NOTE(Jovan): TEST
+  // NOTE(Jovan): Drawing polytope
   // ----------------
-  SimState->Spheres[0].Position = glm::vec3(0.0);
-  SimState->Spheres[0].Radius = 0.05;
+#if DRAW_EPA
   for(uint32 TriangleIndex = 0;
       TriangleIndex < SimState->Triangle->Count;
       ++TriangleIndex)
@@ -813,24 +823,23 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 	{
 	 SimState->Triangle->A[TriangleIndex].P.x, SimState->Triangle->A[TriangleIndex].P.y, SimState->Triangle->A[TriangleIndex].P.z,    
 	 SimState->Triangle->B[TriangleIndex].P.x, SimState->Triangle->B[TriangleIndex].P.y, SimState->Triangle->B[TriangleIndex].P.z,
-	 SimState->Triangle->C[TriangleIndex].P.x, SimState->Triangle->C[TriangleIndex].P.y, SimState->Triangle->C[TriangleIndex].P.z,
-	 SimState->Triangle->A[TriangleIndex].P.x, SimState->Triangle->A[TriangleIndex].P.y, SimState->Triangle->A[TriangleIndex].P.z,
+	 SimState->Triangle->C[TriangleIndex].P.x, SimState->Triangle->C[TriangleIndex].P.y, SimState->Triangle->C[TriangleIndex].P.z
 	};
       glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
       glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
       Model = glm::mat4(1.0);
       SetUniformM4(Render->Shaders[2], "Model", Model);
-      LineColor = glm::vec3(1.0f, 0.0f, 1.0f);
+      LineColor = glm::vec3(1.0, (real32)(TriangleIndex % 3)/2.0, (real32)(TriangleIndex % 4)/3.0);
       SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
       glBindVertexArray(Render->VAOs[3]);
-      glDrawArrays(GL_LINE_STRIP, 0, 4);
+      glDrawArrays(GL_TRIANGLES, 0, 3);
     }
 
   if(Closest != -1)
     {
-      real32 X = SimState->Triangle->N[Closest].x;
-      real32 Y = SimState->Triangle->N[Closest].y;
-      real32 Z = SimState->Triangle->N[Closest].z;
+      real32 X = -SimState->Triangle->N[Closest].x;
+      real32 Y = -SimState->Triangle->N[Closest].y;
+      real32 Z = -SimState->Triangle->N[Closest].z;
       real32 vertices[] =
 	{
 	 0, 0, 0,
@@ -839,15 +848,16 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
       glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
       Model = glm::mat4(1.0);
-      SetUniformM4(Render->Shaders[2], "Model", Model);
       LineColor = glm::vec3(1.0f, 0.0f, 1.0f);
+      SetUniformM4(Render->Shaders[2], "Model", Model);
       SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
       glBindVertexArray(Render->VAOs[3]);
       glDrawArrays(GL_LINE_STRIP, 0, 2);
     }
   // NOTE(Jovan): End test
   // ---------------------
-#if 0
+#endif
+#if DRAW_COORDINATES
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
       ++CubeIndex)
@@ -890,7 +900,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 #endif
   glBindVertexArray(0);
 
-#if 0
+#if DRAW_FLOOR
   // NOTE(Jovan): Floor drawing
   // --------------------------
 
@@ -922,7 +932,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   SetUniformM4(Render->Shaders[0], "View", View);
   SetUniformM4(Render->Shaders[0], "Projection", Projection);
-#if 1
+#if DRAW_CUBES
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
       ++CubeIndex)
@@ -937,7 +947,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 					  SimState->Cubes[CubeIndex].Size));
       SetUniformM4(Render->Shaders[0], "Model", Model);
       glBindVertexArray(Render->VAOs[0]);
-      glDrawArrays(GL_LINE_STRIP, 0, 36);
+      glDrawArrays(GL_TRIANGLES, 0, 36);
     }
 #endif
   glBindTexture(GL_TEXTURE_2D, 0);
@@ -947,7 +957,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Sphere drawing
   // ---------------------------
-#if 1
+#if DRAW_SPHERES
   glUseProgram(Render->Shaders[1]);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, Render->Textures[1]);
@@ -970,7 +980,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 					  SimState->Spheres[SphereIndex].Radius));
       SetUniformM4(Render->Shaders[1], "Model", Model);
       glBindVertexArray(Render->VAOs[1]);
-      glDrawElements(GL_LINE_STRIP, Render->Num,  GL_UNSIGNED_INT, Render->Indices);
+      glDrawElements(GL_TRIANGLES, Render->Num,  GL_UNSIGNED_INT, Render->Indices);
     }
   glBindVertexArray(0);
 #endif
@@ -978,17 +988,18 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // NOTE(Jovan): End sphere drawing
   // -------------------------------
 
-  ClearVertices(SimState->Simplex);
-  ClearTriangles(SimState->Triangle);
-  ClearEdges(SimState->Edge);
   // NOTE(Jovan): Logging
   // --------------------
 
   // TODO(Jovan): Make better logging
 
   printf("Collision: %d\n", CollisionHappened);
+  printf("Triangles: %d\n", SimState->Triangle->Count);
   
   // NOTE(Jovan): End logging
   // ------------------------
+  ClearVertices(SimState->Simplex);
+  ClearTriangles(SimState->Triangle);
+  ClearEdges(SimState->Edge);
         
 }

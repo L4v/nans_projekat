@@ -98,7 +98,7 @@ struct sdl_keyboard
 {
   union
   {
-    sdl_button_state Buttons[12];
+    sdl_button_state Buttons[13];
     struct{
       sdl_button_state MoveForward;
       sdl_button_state MoveBack;
@@ -114,6 +114,7 @@ struct sdl_keyboard
       sdl_button_state DebugForward;
       sdl_button_state DebugBack;
       sdl_button_state DebugReset;
+      sdl_button_state DebugContinue;
     };
   };
 };
@@ -227,6 +228,9 @@ struct sphere
 
 struct sdl_state
 {
+  // TODO(jovan): TEMP
+  real32 Depth;
+  
   // NOTE(Jovan): Vertices for the simplex
   memory_arena SimplexArena;
   memory_arena EdgeArena;
