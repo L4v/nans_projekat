@@ -49,7 +49,7 @@ typedef double real64;
 #define MAX_CUBE_COUNT 16
 #define MAX_SPHERE_COUNT 16
 #define MAX_GJK_ITERATIONS 64
-#define MAX_EPA_ERROR 0.0001f
+#define MAX_EPA_ERROR 0.001f
 #define MAX_EPA_ITERATIONS 64
 
 #if SLOW_BUILD
@@ -58,6 +58,8 @@ typedef double real64;
 #else
 #define Assert(Expression)
 #endif
+
+#define PrintVector(Vector) printf("%f %f %f\n", Vector.x, Vector.y, Vector.z)
 
 
   enum collision_type
@@ -206,15 +208,19 @@ struct sdl_camera
 
 struct cube
 {
-  glm::vec3 Position;
-  glm::vec3 Velocity;
-  glm::vec3 Forces;
+  glm::mat4 Model;
   glm::vec3 Vertices[8];
+  
+  glm::vec3 Position;
+  glm::vec3 TVelocity;
+  glm::vec3 Forces;
+
+  glm::vec3 Angles;
+  glm::vec3 RVelocity;
+  glm::vec3 Torque;
   real32 Size;
   real32 Mass;
-  real32 XAngle;
-  real32 YAngle;
-  real32 ZAngle;
+  real32 MOI;
 };
 
 struct sphere

@@ -73,8 +73,6 @@ MovementFunction(glm::vec3 Velocity, glm::vec3 SummedForces, real32 Mass)
 internal phys_return
 RotationFunction(glm::vec3 RotVelocity, glm::vec3 SummedTorque, real32 MomentOfInertia)
 {
-  // TODO(Jovan): Implement
-  // ubrzanje = 1/m (...);
   phys_return Result = {};
   Result.X = RotVelocity;
   Result.Y = (real32)(1.0f / MomentOfInertia) * (SummedTorque - GLOBAL_FRICTION * RotVelocity);
@@ -145,10 +143,10 @@ HandleInput(sdl_state* State, sdl_input* Input, real32 dt)
   // TODO(Jovan): Temp
   if(Input->KeyboardController.DebugReset.EndedDown)
     {
-      State->Cubes[0].Position = glm::vec3(2.0, 1.0, 2.0);
-      State->Cubes[0].Velocity = glm::vec3(0.0f);
-      State->Cubes[1].Position = glm::vec3(2.0, 3.0, 2.0);
-      State->Cubes[1].Velocity = glm::vec3(0.0f);
+      State->Cubes[0].Position = glm::vec3(2.5, 1.0, 2.0);
+      State->Cubes[0].TVelocity = glm::vec3(0.0f);
+      State->Cubes[1].Position = glm::vec3(2.0, 0.0, 2.0);
+      State->Cubes[1].TVelocity = glm::vec3(0.0f);
     }
 }
 
@@ -249,7 +247,7 @@ PushTriangle(triangle* Triangle, vertex A, vertex B, vertex C)
   // NOTE(Jovan): Normalize vector
   real32 Len = sqrt(glm::dot(Triangle->N[Triangle->Count], Triangle->N[Triangle->Count]));
   Triangle->N[Triangle->Count] *= 1.0f/Len;
-  glm::vec3 A0 = -1.0f * Triangle->A[Triangle->Count].P;
+  glm::vec3 A0 = -Triangle->A[Triangle->Count].P;
   if(glm::dot(A0, Triangle->N[Triangle->Count]) < 0)
     {
       Triangle->N[Triangle->Count] *= -1.0f;
@@ -267,24 +265,17 @@ ClearTriangles(triangle* Triangle)
 internal void
 UpdateVertices(sdl_state* State, int32 CubeIndex)
 {
-  // TODO(Jovan): Handle rotation
   real32 Size = State->Cubes[CubeIndex].Size;
-  State->Cubes[CubeIndex].Vertices[0] = State->Cubes[CubeIndex].Position +
-    Size / 2.0f * glm::vec3(1.0, 1.0, 1.0);
-  State->Cubes[CubeIndex].Vertices[1] = State->Cubes[CubeIndex].Position +
-    Size / 2.0f * glm::vec3(1.0, 1.0, -1.0);
-  State->Cubes[CubeIndex].Vertices[2] = State->Cubes[CubeIndex].Position +
-    Size / 2.0f * glm::vec3(-1.0, 1.0, 1.0);
-  State->Cubes[CubeIndex].Vertices[3] = State->Cubes[CubeIndex].Position +
-    Size / 2.0f * glm::vec3(-1.0, 1.0, -1.0);
-  State->Cubes[CubeIndex].Vertices[4] = State->Cubes[CubeIndex].Position +
-    Size / 2.0f * glm::vec3(1.0, -1.0, 1.0);
-  State->Cubes[CubeIndex].Vertices[5] = State->Cubes[CubeIndex].Position +
-    Size / 2.0f * glm::vec3(1.0, -1.0, -1.0);
-  State->Cubes[CubeIndex].Vertices[6] = State->Cubes[CubeIndex].Position +
-    Size / 2.0f * glm::vec3(-1.0, -1.0, 1.0);
-  State->Cubes[CubeIndex].Vertices[7] = State->Cubes[CubeIndex].Position +
-    Size / 2.0f * glm::vec3(-1.0, -1.0, -1.0);
+  glm::mat4 Model = State->Cubes[CubeIndex].Model;
+  
+  State->Cubes[CubeIndex].Vertices[0] = glm::vec3(Model * glm::vec4(0.5, 0.5, 0.5, 1.0));
+  State->Cubes[CubeIndex].Vertices[1] = glm::vec3(Model * glm::vec4(0.5, 0.5, -0.5, 1.0));
+  State->Cubes[CubeIndex].Vertices[2] = glm::vec3(Model * glm::vec4(-0.5, 0.5, 0.5, 1.0));
+  State->Cubes[CubeIndex].Vertices[3] = glm::vec3(Model * glm::vec4(-0.5, 0.5, -0.5, 1.0));
+  State->Cubes[CubeIndex].Vertices[4] = glm::vec3(Model * glm::vec4(0.5, -0.5, 0.5, 1.0));
+  State->Cubes[CubeIndex].Vertices[5] = glm::vec3(Model * glm::vec4(0.5, -0.5, -0.5, 1.0));
+  State->Cubes[CubeIndex].Vertices[6] = glm::vec3(Model * glm::vec4(-0.5, -0.5, 0.5, 1.0));
+  State->Cubes[CubeIndex].Vertices[7] = glm::vec3(Model * glm::vec4(-0.5, -0.5, -0.5, 1.0));
 }
 
 internal glm::vec3
@@ -498,6 +489,7 @@ internal void
 Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
 	    real32* U, real32* V, real32* W)
 {
+  // TODO(Jovan): Resolve NaN's ?
   glm::vec3 V0 = B - A, V1 = C - A, V2 = P - A;
   real32 D00 = glm::dot(V0, V0);
   real32 D01 = glm::dot(V0, V1);
@@ -535,18 +527,10 @@ ResolveCollision(sdl_state* State, sdl_input* Input, int32 AIndex, int32 BIndex,
       uint32 ClosestIndex = 0;
       real32 CurrentDistance = FLT_MAX;
 
-      // TODO(Jovan): FOR DEBUGGING ONLY
-      // while(!Input->KeyboardController.DebugContinue.EndedDown)
-      // 	{
-      // 	  return -1;
-      // 	}
-      //
-
       for(uint32 TriangleIndex = 0;
 	  TriangleIndex < Triangle->Count;
 	  ++TriangleIndex)
 	{
-	  // TODO(Jovan): Distance isn't being properly calculated probably?
 	  real32 Distance = glm::abs(glm::dot(Triangle->N[TriangleIndex], Triangle->A[TriangleIndex].P));
 	  if(Distance < CurrentDistance)
 	    {
@@ -561,7 +545,7 @@ ResolveCollision(sdl_state* State, sdl_input* Input, int32 AIndex, int32 BIndex,
 
       // NOTE(Jovan): Calculate collision point and normal as linear combination
       // of barycentric pointss
-      if(glm::dot(-Triangle->N[ClosestIndex], NewSupport.P) - CurrentDistance <= MAX_EPA_ERROR)
+      if(glm::dot(-Triangle->N[ClosestIndex], NewSupport.P) - CurrentDistance < MAX_EPA_ERROR)
 	{
 	  real32 BaryU, BaryV, BaryW;
 	  Barycentric(Triangle->N[ClosestIndex] * CurrentDistance,
@@ -588,6 +572,7 @@ ResolveCollision(sdl_state* State, sdl_input* Input, int32 AIndex, int32 BIndex,
 		 BaryW,
 		 Triangle->Count);
 	  State->Spheres[0].Position = CollisionPoint;
+	  State->Spheres[0].Radius = 0.12f;
 	  // NOTE(Jovan): Impulse test
 	  // -------------------------
 	  real32 InvA = 1.0f / (real32)State->Cubes[0].Mass;
@@ -595,19 +580,22 @@ ResolveCollision(sdl_state* State, sdl_input* Input, int32 AIndex, int32 BIndex,
 	  real32 MassA = (real32)State->Cubes[0].Mass;
 	  real32 MassB = (real32)State->Cubes[1].Mass;
 	  // NOTE(Jovan): Coefficient of restitution
-	  real32 e = 0.01f;
-	  glm::vec3 RelativeAtoB = State->Cubes[0].Velocity + State->Cubes[0].Velocity;
+	  real32 e = 0.5f;
+	  glm::vec3 RelativeAtoB = State->Cubes[0].TVelocity + State->Cubes[0].TVelocity;
 	  real32 Impulse = (-(1.0f + e) * (glm::dot(RelativeAtoB, CollisionNormal))) /
 	    (InvA + InvB);
 
-	  State->Cubes[0].Velocity += InvA * (Impulse * CollisionNormal) ;
-	  State->Cubes[1].Velocity -= InvB * (Impulse * CollisionNormal);
+	  State->Cubes[0].TVelocity += InvA * (Impulse * CollisionNormal) ;
+	  State->Cubes[1].TVelocity -= InvB * (Impulse * CollisionNormal);
+
+	  // TODO(Jovan): Testing
+	   State->Cubes[0].Position -= CollisionNormal * Depth;
+	  // State->Cubes[1].Position += CollisionNormal * Depth;
 	  return ClosestIndex;
+
 
 	  // NOTE(Jovan): End impulse test
 	  // ----------------------------
-	  
-	  break;
 	}
       
       // NOTE(Jovan): Removing triangle that can be "seen" by the new point
@@ -695,29 +683,41 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       
       // NOTE(Jovan): Cube init
       SimState->CubeCount = 2;
+      SimState->Cubes[0].Model = glm::mat4(1.0);
+      UpdateVertices(SimState, 0);
+      
       SimState->Cubes[0].Position = glm::vec3(2.1,
 					      2.5,
 					      2.0);
-      SimState->Cubes[0].Velocity = glm::vec3(0.0);
+      SimState->Cubes[0].TVelocity = glm::vec3(0.0);
       SimState->Cubes[0].Forces = glm::vec3(0.0);
-      SimState->Cubes[0].XAngle = 0.0f;
-      SimState->Cubes[0].YAngle = 0.0f;
-      SimState->Cubes[0].ZAngle = 0.0f;
+      
+      SimState->Cubes[0].Angles = glm::vec3(0.0);
+      SimState->Cubes[0].RVelocity = glm::vec3(0.0);
+      SimState->Cubes[0].Torque = glm::vec3(0.0);
+      
       SimState->Cubes[0].Size = 1.0f;
       SimState->Cubes[0].Mass = 1.0f;
-      UpdateVertices(SimState, 0);
+      SimState->Cubes[1].MOI = (SimState->Cubes[0].Mass / 12.0f) *
+	(2.0f * SimState->Cubes[0].Size * SimState->Cubes[0].Size);
 
+      SimState->Cubes[1].Model = glm::mat4(1.0);
+      UpdateVertices(SimState, 1);
       
       SimState->Cubes[1].Position = glm::vec3(2.0,
 					      1.0,
 					      2.0);
-      SimState->Cubes[1].Velocity = glm::vec3(0.0);
+      SimState->Cubes[1].TVelocity = glm::vec3(0.0);
       SimState->Cubes[1].Forces = glm::vec3(0.0);
-      SimState->Cubes[1].XAngle = 0.0f;
-      SimState->Cubes[1].YAngle = 0.0f;
-      SimState->Cubes[1].ZAngle = 0.0f;
+      
+      SimState->Cubes[1].Angles = glm::vec3(0.0);
+      SimState->Cubes[1].RVelocity = glm::vec3(0.0);
+      SimState->Cubes[1].Torque = glm::vec3(0.0);
+      
       SimState->Cubes[1].Size = 1.0f;
       SimState->Cubes[1].Mass = 1.0f;
+      SimState->Cubes[1].MOI = (SimState->Cubes[1].Mass / 12.0f) *
+	(2.0f * SimState->Cubes[1].Size * SimState->Cubes[1].Size);
       UpdateVertices(SimState, 1);
 
       // NOTE(Jovan): Sphere init
@@ -776,7 +776,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     }
 
 
-  //  CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  //CubeAddForce(SimState, 0, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
@@ -785,10 +785,10 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       phys_return Y0 = {};
       phys_return Y = {};
       Y0.X = SimState->Cubes[CubeIndex].Position;
-      Y0.Y = SimState->Cubes[CubeIndex].Velocity;
+      Y0.Y = SimState->Cubes[CubeIndex].TVelocity;
       Y = Euler(MovementFunction, dt, Y0, SimState->Cubes[CubeIndex].Forces, SimState->Cubes[CubeIndex].Mass);
       SimState->Cubes[CubeIndex].Position = Y.X;
-      SimState->Cubes[CubeIndex].Velocity = Y.Y;
+      SimState->Cubes[CubeIndex].TVelocity = Y.Y;
       UpdateVertices(SimState, CubeIndex);
       CubeClearForces(SimState, CubeIndex);
     }
@@ -805,6 +805,11 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
 		     SimState->Camera.Up);
 
+#if DRAW_WIRE
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+#else
+  glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+#endif
   // NOTE(Jovan): Coordinate drawing
   glUseProgram(Render->Shaders[2]);
   SetUniformM4(Render->Shaders[2], "View", View);
@@ -866,6 +871,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 	  i < 8;
 	  ++i)
 	{
+	  
 	  // NOTE(Jovan): X
 	  Model = glm::mat4(1.0);
 	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
@@ -939,12 +945,13 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     {
       Model = glm::mat4(1.0f);
       Model = glm::translate(Model, SimState->Cubes[CubeIndex].Position);
-      Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].XAngle), glm::vec3(1.0f, 0.0f, 0.0f));
-      Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].YAngle), glm::vec3(0.0f, 1.0f, 0.0f));
-      Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].ZAngle), glm::vec3(0.0f, 0.0f, 1.0f));
+      Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].Angles.x), glm::vec3(1.0f, 0.0f, 0.0f));
+      Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].Angles.y), glm::vec3(0.0f, 1.0f, 0.0f));
+      Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].Angles.z), glm::vec3(0.0f, 0.0f, 1.0f));
       Model = glm::scale(Model, glm::vec3(SimState->Cubes[CubeIndex].Size,
 					  SimState->Cubes[CubeIndex].Size,
 					  SimState->Cubes[CubeIndex].Size));
+      SimState->Cubes[CubeIndex].Model = Model;
       SetUniformM4(Render->Shaders[0], "Model", Model);
       glBindVertexArray(Render->VAOs[0]);
       glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -995,6 +1002,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   printf("Collision: %d\n", CollisionHappened);
   printf("Triangles: %d\n", SimState->Triangle->Count);
+  printf("Normals:\n");
+  PrintVector(SimState->Triangle->N[0]);
   
   // NOTE(Jovan): End logging
   // ------------------------
