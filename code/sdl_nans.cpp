@@ -306,7 +306,8 @@ SDLUnloadSimCode(sdl_sim_code* SimCode)
 }
 
 
-void LoadShader( const char *file_name, char *shader_str, int max_len ) {
+void
+LoadShader( const char *file_name, char *shader_str, int max_len ) {
   FILE *file = fopen( file_name, "r" );
   if ( !file ) {
     printf( "ERROR: opening file for reading: %s\n", file_name );

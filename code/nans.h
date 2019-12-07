@@ -7,6 +7,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/normal.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/matrix_operation.hpp> 
 #include <cstdio>
 #include <vector>
 #include <time.h>
@@ -259,6 +260,13 @@ struct phys_return
 {
   glm::vec3 X;
   glm::vec3 Y;
+};
+
+struct contact_info
+{
+  glm::vec3 Point;
+  // TODO(Jovan): Probably not needed
+  glm::vec3 Normal;
 };
 
 #define SIM_UPDATE_AND_RENDER(name) void name(memory* Memory, sdl_input* Input, sdl_render* Render, real32 dt)
