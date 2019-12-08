@@ -715,74 +715,64 @@ Constraint(sdl_state* State, int32 IndexA, int32 IndexB, glm::vec3 N,
 {
   if(N == glm::vec3(0.0))
     return;
-  // NOTE(Jovan): Each cube info
-  glm::vec3 RA = InfoA->Point - State->Cubes[IndexA].Position;
-  glm::vec3 VA = State->Cubes[IndexA].TVelocity;
-  glm::vec3 WA = State->Cubes[IndexA].RVelocity;
-  real32 MA = State->Cubes[IndexA].Mass;
-  real32 IA = State->Cubes[IndexA].MOI;
 
-  glm::vec3 RB = InfoB->Point - State->Cubes[IndexB].Position;
-  glm::vec3 VB = State->Cubes[IndexB].TVelocity;
-  glm::vec3 WB = State->Cubes[IndexB].RVelocity;
-  real32 MB = State->Cubes[IndexB].Mass;
-  real32 IB = State->Cubes[IndexB].MOI;
-  
-  // NOTE(Jovan): Depth of collision 
-  real32 D = glm::dot((InfoB->Point - InfoA->Point), N);
-
-  // NOTE(Jovan): Beta for Baumgarte term
-  real32 Beta = 0.1f;
-  // NOTE(Jovan): Coefficient of restitution
-  real32 CR = 0.0f;
-  
+  // NOTE(Jovan): Calculating J(M^-1)(J^T)
+  glm::vec3 R1 = InfoA->Point - State->Cubes[IndexA].Position;
+  glm::vec3 R2 = InfoB->Point - State->Cubes[IndexB].Position;
+  // NOTE(Jovan): Penetration depth
+  real32 Depth = glm::dot(((State->Cubes[IndexA].Position + R1) - (State->Cubes[IndexB].Position + R2)), N);
+  // NOTE(Jovan): R x N
+  glm::vec3 RN1 = glm::cross(R1, N);
+  glm::vec3 RN2 = glm::cross(R2, N);
+  // NOTE(Jovan): I^-1
+  real32 InvI1 = 1.0f / State->Cubes[IndexA].MOI;
+  real32 InvI2 = 1.0f / State->Cubes[IndexB].MOI;
+  // NOTE(Jovan): JMJ
+  real32 JMJ = (1.0f / State->Cubes[IndexA].Mass) + (1.0f / State->Cubes[IndexB].Mass);
+  JMJ += InvI1 * (glm::dot(RN1, RN1)) - InvI2 * (glm::dot(-RN2, -RN2));
+  // NOTE(Jovan): 1 / (JMJ)
+  JMJ = 1.0f / JMJ;
+  // NOTE(Jovan): Baumgarte
+  real32 Beta = 0.05f;
   // NOTE(Jovan): Bias
-  real32 b = -(Beta / DT) * D + CR * glm::dot((-VA - glm::cross(WA, RA) + VB + glm::cross(WB, RB)), N);
-  // NOTE(Jovan): Velocity vector
-  glm::vec3 V[] = {VA, WA, VB, WB};
-  // NOTE(Jovan): Jacobian
-  glm::vec3 J[] = {-N, -glm::cross(RA, N), N, glm::cross(RB, N)};
-  // NOTE(Jovan): Mass matrix (inversed)
-  glm::mat4 InvM = glm::diagonal4x4(glm::vec4(1.0f/MA, 1.0f/IA, 1.0f/MB, 1.0f/IB));
-  real32 JV = 0;
-  for(uint32 i = 0;
-      i < 4;
-      ++i)
+  real32 B = Beta * Depth/DT;
+  // NOTE(Jovan): Velocities
+  glm::vec3 V1 = State->Cubes[IndexA].TVelocity;
+  glm::vec3 V2 = State->Cubes[IndexB].TVelocity;
+  glm::vec3 W1 = State->Cubes[IndexA].RVelocity;
+  glm::vec3 W2 = State->Cubes[IndexB].RVelocity;
+  // TODO(Jovan): Restitution bias
+  int32 Iter = 1;
+  while(Iter--)
     {
-      JV += glm::dot(J[i], V[i]);
-    }
-  glm::vec3 MJ[4];
-  for(uint32 i = 0;
-      i < 4;
-      ++i)
-    {
-      MJ[i] = InvM[i][i] * J[i];
-    }
-  real32 EffectiveM = 0;
-  for(uint32 i = 0;
-      i < 4;
-      ++i)
-    {
-      EffectiveM += glm::dot(J[i], MJ[i]);
-    }
-  // NOTE(Jovan): Lambda
-  real32 Lambda = (JV + b) / EffectiveM;
-  printf("L %f\n", Lambda);
-  
-  // NOTE(Jovan): M^-1 * Pc = M^-1 * J^T * Lambda
-  glm::vec3 DeltaV[4];
-  for(uint32 i = 0;
-      i < 4;
-      ++i)
-    {
-      DeltaV[i] = InvM[i][i] * J[i] * Lambda;
-    }
+      // NOTE(Jovan): Derivative of V
+      glm::vec3 dV = V1 + glm::cross(W1, N) - V2 - glm::cross(W2, N);
+      real32 JdV = glm::dot(dV, N);
 
-  // NOTE(Jovan): V_new = V_old + DeltaV = V_old + M^-1 * Pc
-  State->Cubes[IndexA].TVelocity += DeltaV[0];
-  State->Cubes[IndexA].RVelocity += DeltaV[1];
-  State->Cubes[IndexB].TVelocity += DeltaV[2];
-  State->Cubes[IndexB].RVelocity += DeltaV[3];
+      real32 Lambda = -(JdV + B) * JMJ;
+
+      // NOTE(Jovan): Accumulating and clamping impulse
+      real32 OldAccumI = State->AccumI;
+      State->AccumI += Lambda;
+      if(State->AccumI < 0)
+	{
+	  State->AccumI = 0.0f;
+	}
+
+      real32 Impulse = State->AccumI - OldAccumI;
+      // NOTE(Jovan): Calculating linear impulse
+      glm::vec3 LinearImpulse = N * Impulse;
+      // NOTE(Jovan): Calculating angular impulses
+      glm::vec3 AngularI1 = RN1 * Impulse;
+      glm::vec3 AngularI2 = RN2 * Impulse;
+
+      // NOTE(Jovan): Applying linear impulses
+      State->Cubes[IndexA].TVelocity += (1.0f / State->Cubes[IndexA].Mass) * LinearImpulse;
+      State->Cubes[IndexB].TVelocity -= (1.0f / State->Cubes[IndexB].Mass) * LinearImpulse;
+      // NOTE(Jovan): Applying angular impulses
+      State->Cubes[IndexA].RVelocity += InvI1 * AngularI1;
+      State->Cubes[IndexB].RVelocity -= InvI2 * AngularI2;
+    }
 }
 
 extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
@@ -871,7 +861,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Cubes[1].Torque = glm::vec3(0.0);
       
       SimState->Cubes[1].Size = 1.0f;
-      SimState->Cubes[1].Mass = 1.0f;
+      SimState->Cubes[1].Mass = 10.0f;
       SimState->Cubes[1].MOI = (SimState->Cubes[1].Mass / 12.0f) *
 	(2.0f * SimState->Cubes[1].Size * SimState->Cubes[1].Size);
       UpdateVertices(SimState, 1);
@@ -1226,5 +1216,6 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   ClearVertices(SimState->Simplex);
   ClearTriangles(SimState->Triangle);
   ClearEdges(SimState->Edge);
-        
+  // NOTE(Jovan): Clear accumulated impulse
+  SimState->AccumI = 0.0f;
 }

@@ -252,6 +252,8 @@ struct sdl_state
   uint32 CubeCount;
   uint32 SphereCount;
   uint32 GJKIteration;
+
+  real32 AccumI;
 };
 
 // NOTE(Jovan): Return value for ODEs and physics functions
