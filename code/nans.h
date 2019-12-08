@@ -69,10 +69,12 @@ typedef double real64;
 	CC - CUBE x CUBE
 	CS - CUBE x SPHERE
 	SS - SPHERE x SPHERE
+	CP - CUBE x PLANE
      */
      CC = 0,
      CS,
-     SS
+     SS,
+     CP
     };
 
 enum evolve_result
@@ -207,6 +209,17 @@ struct sdl_camera
   glm::vec3 Right;
 };
 
+struct plane
+{
+  glm::mat4 Model;
+  glm::vec3 Position;
+  glm::vec3 Vertices[4];
+  real32 Size;
+  real32 Mass;
+  real32 MOI;
+};
+
+
 struct cube
 {
   glm::mat4 Model;
@@ -233,10 +246,16 @@ struct sphere
   real32 ZAngle;
 };
 
+
 struct sdl_state
 {
   // TODO(jovan): TEMP
   real32 Depth;
+
+  // TODO(jovan): Keep like this?
+  uint32 IndexA;
+  uint32 IndexB;
+  collision_type CurrentCollisionType;
   
   // NOTE(Jovan): Vertices for the simplex
   memory_arena SimplexArena;
@@ -248,6 +267,8 @@ struct sdl_state
   
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
+  plane Floor;
+  
   sdl_camera Camera;
   uint32 CubeCount;
   uint32 SphereCount;

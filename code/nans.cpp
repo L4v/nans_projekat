@@ -273,9 +273,18 @@ ClearTriangles(triangle* Triangle)
 }
 
 internal void
+FloorUpdateVertices(sdl_state* State)
+{
+  glm::mat4 Model = State->Floor.Model;
+  State->Floor.Vertices[0] = glm::vec3(Model * glm::vec4(50.0f, -0.5f, 50.0f, 1.0));
+  State->Floor.Vertices[1] = glm::vec3(Model * glm::vec4(-50.0f, -0.5f, 50.0f, 1.0));
+  State->Floor.Vertices[2] = glm::vec3(Model * glm::vec4(-50.0f, -0.5f, -50.0f, 1.0));
+  State->Floor.Vertices[3] = glm::vec3(Model * glm::vec4(50.0f, -0.5f, -50.0f, 1.0));
+}
+
+internal void
 UpdateVertices(sdl_state* State, int32 CubeIndex)
 {
-  real32 Size = State->Cubes[CubeIndex].Size;
   glm::mat4 Model = State->Cubes[CubeIndex].Model;
   
   State->Cubes[CubeIndex].Vertices[0] = glm::vec3(Model * glm::vec4(0.5, 0.5, 0.5, 1.0));
@@ -323,15 +332,15 @@ GetSphereSupport(sdl_state* State, int32 SphereIndex, glm::vec3 Direction)
 }
 
 internal vertex
-CalculateSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction, collision_type Type)
+CalculateSupport(sdl_state* State, glm::vec3 Direction)
 {
   vertex Result = {};
-  switch(Type)
+  switch(State->CurrentCollisionType)
     {
     case CC:
       {
-	glm::vec3 SupportA = GetCubeSupport(State, AIndex, Direction);
-	glm::vec3 SupportB = GetCubeSupport(State, BIndex, -1.0f * Direction);
+	glm::vec3 SupportA = GetCubeSupport(State, State->IndexA, Direction);
+	glm::vec3 SupportB = GetCubeSupport(State, State->IndexB, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
 	PushVertex(State->Simplex, Result);
@@ -344,16 +353,24 @@ CalculateSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Directi
       {
 	// TODO(Jovan): Implement
       }break;
+    case CP:
+      {
+	// TODO(Jovan): Implement
+      }break;
     }
 
   return Result;
 }
 
 internal bool32
-AddSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction)
+AddSupport(sdl_state* State, glm::vec3 Direction)
 {
   bool32 Result = 0;
-  vertex NewVertex = CalculateSupport(State, AIndex, BIndex, Direction, CC);
+  vertex NewVertex = {};
+  if(State->CurrentCollisionType == CC)
+    {
+      NewVertex = CalculateSupport(State, Direction);
+    }
   if(glm::dot(Direction, NewVertex.P) >= 0)
     {
       Result = 1;
@@ -366,13 +383,11 @@ AddSupport(sdl_state* State, int32 AIndex, int32 BIndex, glm::vec3 Direction)
 }
 
 internal evolve_result
-EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
+EvolveSimplex(sdl_state* State, glm::vec3 PositionA, glm::vec3 PositionB)
 {
   // TODO(Jovan): For now, under the assumption that it's 2 cubes
   evolve_result Result = NoIntersection;
   glm::vec3 Direction = glm::vec3(0.0f);
-  cube* ShapeA = &State->Cubes[AIndex];
-  cube* ShapeB = &State->Cubes[BIndex];
   simplex* Simplex = State->Simplex;
   uint32 NoVertices = Simplex->Count;
   switch(NoVertices)
@@ -381,7 +396,7 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
       {
 	// NOTE(Jovan): Best presumption of dir is the relative direction
 	// of the 2 shapes
-	Direction = ShapeB->Position - ShapeA->Position;
+	Direction = PositionB - PositionA;
       }break;
     case 1:
       {
@@ -462,7 +477,7 @@ EvolveSimplex(sdl_state* State, int32 AIndex, int32 BIndex)
 	printf("ERROR::There can't be more than 4 vertices\n");
       }
     }
-  if(AddSupport(State, AIndex, BIndex, Direction))
+  if(AddSupport(State, Direction))
     {
       Result = StillEvolving;
     }
@@ -481,7 +496,7 @@ DetectCollisions(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Ty
 
   while((EvolutionResult == StillEvolving) && (State->GJKIteration++ <= MAX_GJK_ITERATIONS))
     {
-      EvolutionResult = EvolveSimplex(State, AIndex, BIndex);
+      EvolutionResult = EvolveSimplex(State, State->Cubes[AIndex].Position, State->Cubes[BIndex].Position);
     }
   
   if(EvolutionResult == FoundIntersection)
@@ -580,7 +595,7 @@ ResolveCollision(sdl_state* State, sdl_input* Input, int32 AIndex, int32 BIndex,
       //CurrentDistance = CurrentDistance == 0 ? 0.01 : CurrentDistance;
       
       glm::vec3 Direction = Triangle->N[ClosestIndex];
-      vertex NewSupport = CalculateSupport(State, AIndex, BIndex, Direction, Type);
+      vertex NewSupport = CalculateSupport(State, Direction);
 
 
       // NOTE(Jovan): Calculate collision point and normal as linear combination
@@ -745,6 +760,7 @@ Constraint(sdl_state* State, int32 IndexA, int32 IndexB, glm::vec3 N,
   int32 Iter = 1;
   while(Iter--)
     {
+      // TODO(Jovan): Update depth/position here?
       // NOTE(Jovan): Derivative of V
       glm::vec3 dV = V1 + glm::cross(W1, N) - V2 - glm::cross(W2, N);
       real32 JdV = glm::dot(dV, N);
@@ -875,6 +891,12 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Spheres[0].YAngle = 0.0f;
       SimState->Spheres[0].ZAngle = 0.0f;
       SimState->Spheres[0].Radius = 0.5f;
+
+      // NOTE(Jovan): Floor init
+      FloorUpdateVertices(SimState);
+      SimState->Floor.Position = glm::vec3(0.0f);
+      SimState->Floor.Size = 1.0f;
+      SimState->Floor.Model = glm::mat4(1.0f);
       
       Memory->IsInitialized = 1;
     }
@@ -944,7 +966,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     }
 
 
-  //CubeAddForce(SimState, 0, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  //CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   //CubeAddTorque(SimState,0, glm::vec3(1.0));
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
@@ -1094,14 +1116,16 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // ---------------------------------
 
 #if 1
-  vertex v1 = CalculateSupport(SimState, 0, 1, glm::vec3(1.0, 1.0, 1.0), CC);
-  vertex v2 = CalculateSupport(SimState, 0, 1, glm::vec3(-1.0, 1.0, 1.0), CC);
-  vertex v3 = CalculateSupport(SimState, 0, 1, glm::vec3(1.0, -1.0, 1.0), CC);
-  vertex v4 = CalculateSupport(SimState, 0, 1, glm::vec3(-1.0, -1.0, 1.0), CC);
-  vertex v5 = CalculateSupport(SimState, 0, 1, glm::vec3(1.0, 1.0, -1.0), CC);
-  vertex v6 = CalculateSupport(SimState, 0, 1, glm::vec3(-1.0, 1.0, -1.0), CC);
-  vertex v7 = CalculateSupport(SimState, 0, 1, glm::vec3(1.0, -1.0, -1.0), CC);
-  vertex v8 = CalculateSupport(SimState, 0, 1, glm::vec3(-1.0, -1.0, -1.0), CC);
+  SimState->IndexA = 0;
+  SimState->IndexB = 1;
+  vertex v1 = CalculateSupport(SimState, glm::vec3(1.0, 1.0, 1.0));
+  vertex v2 = CalculateSupport(SimState, glm::vec3(-1.0, 1.0, 1.0));
+  vertex v3 = CalculateSupport(SimState, glm::vec3(1.0, -1.0, 1.0));
+  vertex v4 = CalculateSupport(SimState, glm::vec3(-1.0, -1.0, 1.0));
+  vertex v5 = CalculateSupport(SimState, glm::vec3(1.0, 1.0, -1.0));
+  vertex v6 = CalculateSupport(SimState, glm::vec3(-1.0, 1.0, -1.0));
+  vertex v7 = CalculateSupport(SimState, glm::vec3(1.0, -1.0, -1.0));
+  vertex v8 = CalculateSupport(SimState, glm::vec3(-1.0, -1.0, -1.0));
   real32 MinkowskiVertices[] = {
 				v1.P.x, v1.P.y, v1.P.z,
 				v2.P.x, v2.P.y, v2.P.z,
