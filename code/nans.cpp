@@ -489,11 +489,12 @@ EvolveSimplex(sdl_state* State, glm::vec3 PositionA, glm::vec3 PositionB)
 }
 
 internal bool32
-DetectCollisions(sdl_state* State, int32 AIndex, int32 BIndex, collision_type Type)
+DetectCollisions(sdl_state* State, collision_type Type)
 {
   bool32 Result = 0;
   evolve_result EvolutionResult = StillEvolving;
-
+  int32 AIndex = State->IndexA;
+  int32 BIndex = State->IndexB;
   while((EvolutionResult == StillEvolving) && (State->GJKIteration++ <= MAX_GJK_ITERATIONS))
     {
       EvolutionResult = EvolveSimplex(State, State->Cubes[AIndex].Position, State->Cubes[BIndex].Position);
@@ -553,8 +554,7 @@ DrawTriangles(sdl_state* State, sdl_render* Render)
 }
 
 internal int32
-ResolveCollision(sdl_state* State, sdl_input* Input, int32 AIndex, int32 BIndex, collision_type Type,
-		 contact_info* Info)
+ResolveCollision(sdl_state* State, sdl_input* Input, collision_type Type, contact_info* Info)
 {
   int32 CurrIter = 0;
   simplex* Simplex = State->Simplex;
@@ -615,18 +615,6 @@ ResolveCollision(sdl_state* State, sdl_input* Input, int32 AIndex, int32 BIndex,
 	  real32 Depth = CurrentDistance;
 	  State->Depth = Depth;
 
-	  // TODO(Jovan): Logging remove
-	  printf("Point = %f, %f, %f | Depth:%f | Iteration: %d\nU: %f, V: %f, W: %f | Triangles: %d\n",
-		 CollisionPoint.x,
-		 CollisionPoint.y,
-		 CollisionPoint.z,
-		 Depth,
-		 CurrIter,
-		 BaryU,
-		 BaryV,
-		 BaryW,
-		 Triangle->Count);
-
 	  Info->Point = CollisionPoint;
 	  // TODO(Jovan): Probably not needed
 	  Info->Normal = CollisionNormal;
@@ -660,7 +648,7 @@ ResolveCollision(sdl_state* State, sdl_input* Input, int32 AIndex, int32 BIndex,
 	  real32 Impulse =  ImpulseNumerator / ImpulseDenominator;
 
 	  State->Cubes[0].TVelocity += InvA * (Impulse * CollisionNormal) ;
-	  //State->Cubes[1].TVelocity -= InvB * (Impulse * CollisionNormal);
+	  State->Cubes[1].TVelocity -= InvB * (Impulse * CollisionNormal);
 	  
 	  State->Cubes[0].RVelocity += glm::cross(rA, (CollisionNormal * Impulse)) / InertiaA;
 	  //State->Cubes[1].RVelocity -= glm::cross(rB, (CollisionNormal * Impulse)) / InertiaB;
@@ -674,15 +662,10 @@ ResolveCollision(sdl_state* State, sdl_input* Input, int32 AIndex, int32 BIndex,
 	  //State->Cubes[0].Position += CollisionNormal * Depth;
 	  // State->Cubes[1].Position += CollisionNormal * Depth;
 
-	  // IMPORTANT TODO(Jovan): USE CONSTRAINTS
-
 	  // NOTE(Jovan): End impulse test
 	  // ----------------------------
 # endif
 	}
-      
-      State->Spheres[0].Position = NewSupport.P;
-      State->Spheres[0].Radius = 0.12f;
 
       // TODO(Jovan): Triangles that should be removed are not for some reason ???
       // NOTE(Jovan): Removing triangle that can be "seen" by the new point
@@ -936,17 +919,20 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Physics stuff
   // --------------------------
-  // TODO(Jovan): Temp
+  // TODO(Jovan): Avoiding 2 "fake" collisions at start of simulation
   local_persist int32 Fakes = 2;
-  bool32 CollisionHappened = DetectCollisions(SimState, 0, 1, CC);
+      SimState->IndexA = 1;
+      SimState->IndexB = 0;
+  bool32 CollisionHappened = DetectCollisions(SimState, CC);
   int32 Closest = -1;
   contact_info A = {};
   contact_info B = {};
+  glm::vec3 Normal;
   if(CollisionHappened && Fakes-- <= 0)
     {
       Fakes = 0;
       // NOTE(Jovan): For B to A
-      Closest = ResolveCollision(SimState, Input,  1, 0, CC, &B);
+      Closest = ResolveCollision(SimState, Input, CC, &B);
 
       // NOTE(Jovan): Clear B to A collision info so GJK can start over
       // for A to B
@@ -955,14 +941,15 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       ClearVertices(SimState->Simplex);
 
       // NOTE(Jovan): For A to B
-      if(DetectCollisions(SimState, 0, 1, CC))
+      SimState->IndexA = 0;
+      SimState->IndexB = 1;
+      if(DetectCollisions(SimState, CC))
 	{
 	  printf("Second happened");
 	}
-      Closest = ResolveCollision(SimState, Input,  0, 1, CC, &A);
-      glm::vec3 Normal = -SimState->Triangle->N[Closest];
-
-      Constraint(SimState, 0, 1, Normal, &A, &B, dt);
+      Closest = ResolveCollision(SimState, Input, CC, &A);
+      Normal = -SimState->Triangle->N[Closest];
+      //Constraint(SimState, 0, 1, Normal, &A, &B, dt);
     }
 
 
@@ -1010,7 +997,32 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 #else
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 #endif
+  // NOTE(Jovan): Collision depth drawing
+  glUseProgram(Render->Shaders[2]);
+  SetUniformM4(Render->Shaders[2], "View", View);
+  SetUniformM4(Render->Shaders[2], "Projection", Projection);
+  if(Closest != -1)
+    {
+      real32 PenDepth = glm::dot(((SimState->Cubes[0].Position + A.Point) -
+				    (SimState->Cubes[1].Position + B.Point)),
+				   Normal);
+      glm::vec3 LineColor = glm::vec3(1.0, 0.0, 0.0);
+      real32 Vertices[] =
+	{
+	 A.Point.x, A.Point.y, A.Point.z,
+	 B.Point.x, B.Point.y, B.Point.z 
+	};
+      glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_DYNAMIC_DRAW);
+      Model = glm::mat4(1.0);
+      SetUniformM4(Render->Shaders[2], "Model", Model);
+      SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
+      glBindVertexArray(Render->VAOs[3]);
+      glDrawArrays(GL_LINE_STRIP, 0, 2);
+    }
+  
   // NOTE(Jovan): Coordinate drawing
+  // -------------------------------
   glUseProgram(Render->Shaders[2]);
   SetUniformM4(Render->Shaders[2], "View", View);
   SetUniformM4(Render->Shaders[2], "Projection", Projection);
@@ -1115,7 +1127,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // NOTE(Jovan): Minkowski sum drawing
   // ---------------------------------
 
-#if 1
+#if DRAW_MINKOWSKI
   SimState->IndexA = 0;
   SimState->IndexB = 1;
   vertex v1 = CalculateSupport(SimState, glm::vec3(1.0, 1.0, 1.0));
@@ -1225,7 +1237,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Logging
   // --------------------
-
+#if LOGGING
   // TODO(Jovan): Make better logging
 
   printf("Collision: %d\n", CollisionHappened);
@@ -1234,7 +1246,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   PrintVector(SimState->Triangle->N[0]);
   printf("Cube 0 position:");
   PrintVector(SimState->Cubes[0].Position);
-  
+#endif
   // NOTE(Jovan): End logging
   // ------------------------
   ClearVertices(SimState->Simplex);
