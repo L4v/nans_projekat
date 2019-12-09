@@ -708,6 +708,28 @@ ResolveCollision(sdl_state* State, sdl_input* Input, collision_type Type, contac
 }
 
 internal void
+IntegrateForces(sdl_state* State, uint32 CubeIndex, real32 dt)
+{
+  phys_return Y0 = {};
+  phys_return Y = {};
+  // NOTE(Jovan): Translational
+  Y0.X = State->Cubes[CubeIndex].Position;
+  Y0.Y = State->Cubes[CubeIndex].TVelocity;
+  Y = Euler(MovementFunction, dt, Y0, State->Cubes[CubeIndex].Forces, State->Cubes[CubeIndex].Mass);
+  State->Cubes[CubeIndex].TVelocity = Y.Y;
+
+  // NOTE(Jovan): Rotational
+  Y0.X = State->Cubes[CubeIndex].Angles;
+  Y0.Y = State->Cubes[CubeIndex].RVelocity;
+  Y = Euler(RotationFunction, dt, Y0, State->Cubes[CubeIndex].Torque, State->Cubes[CubeIndex].MOI);
+  State->Cubes[CubeIndex].RVelocity = Y.Y;
+  
+  // NOTE(Jovan): Update states and clear the forces/torques
+  UpdateVertices(State, CubeIndex);
+  CubeClearForces(State, CubeIndex);
+}
+
+internal void
 Constraint(sdl_state* State, int32 IndexA, int32 IndexB, glm::vec3 N,
 	   contact_info* InfoA, contact_info* InfoB, real32 DT)
 {
@@ -740,7 +762,8 @@ Constraint(sdl_state* State, int32 IndexA, int32 IndexB, glm::vec3 N,
   glm::vec3 W1 = State->Cubes[IndexA].RVelocity;
   glm::vec3 W2 = State->Cubes[IndexB].RVelocity;
   // TODO(Jovan): Restitution bias
-  int32 Iter = 1;
+  int32 Iter = 10;
+  real32 Impulse = 0;
   while(Iter--)
     {
       // TODO(Jovan): Update depth/position here?
@@ -758,20 +781,20 @@ Constraint(sdl_state* State, int32 IndexA, int32 IndexB, glm::vec3 N,
 	  State->AccumI = 0.0f;
 	}
 
-      real32 Impulse = State->AccumI - OldAccumI;
-      // NOTE(Jovan): Calculating linear impulse
-      glm::vec3 LinearImpulse = N * Impulse;
-      // NOTE(Jovan): Calculating angular impulses
-      glm::vec3 AngularI1 = RN1 * Impulse;
-      glm::vec3 AngularI2 = RN2 * Impulse;
+      Impulse = State->AccumI - OldAccumI;
 
-      // NOTE(Jovan): Applying linear impulses
-      State->Cubes[IndexA].TVelocity += (1.0f / State->Cubes[IndexA].Mass) * LinearImpulse;
-      State->Cubes[IndexB].TVelocity -= (1.0f / State->Cubes[IndexB].Mass) * LinearImpulse;
-      // NOTE(Jovan): Applying angular impulses
-      State->Cubes[IndexA].RVelocity += InvI1 * AngularI1;
-      State->Cubes[IndexB].RVelocity -= InvI2 * AngularI2;
     }
+  // NOTE(Jovan): Calculating linear impulse
+  glm::vec3 LinearImpulse = N * Impulse;
+  // NOTE(Jovan): Calculating angular impulses
+  glm::vec3 AngularI1 = RN1 * Impulse;
+  glm::vec3 AngularI2 = RN2 * Impulse;
+  // NOTE(Jovan): Applying linear impulses
+  State->Cubes[IndexA].TVelocity += (1.0f / State->Cubes[IndexA].Mass) * LinearImpulse;
+  State->Cubes[IndexB].TVelocity -= (1.0f / State->Cubes[IndexB].Mass) * LinearImpulse;
+  // NOTE(Jovan): Applying angular impulses
+  State->Cubes[IndexA].RVelocity += InvI1 * AngularI1;
+  State->Cubes[IndexB].RVelocity -= InvI2 * AngularI2;
 }
 
 extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
@@ -949,37 +972,29 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 	}
       Closest = ResolveCollision(SimState, Input, CC, &A);
       Normal = -SimState->Triangle->N[Closest];
-      //Constraint(SimState, 0, 1, Normal, &A, &B, dt);
+      Constraint(SimState, 0, 1, Normal, &A, &B, dt);
     }
 
 
   //CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   //CubeAddTorque(SimState,0, glm::vec3(1.0));
+  // for(uint32 CubeIndex = 0;
+  //     CubeIndex < SimState->CubeCount;
+  //     ++CubeIndex)
+  //   {
+  //     IntegrateForces(SimState, CubeIndex, dt);
+
+  //   }
+
+  IntegrateForces(SimState, 0, dt);
+  IntegrateForces(SimState, 1, dt);  
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
       ++CubeIndex)
     {
-      phys_return Y0 = {};
-      phys_return Y = {};
-      // NOTE(Jovan): Translational
-      Y0.X = SimState->Cubes[CubeIndex].Position;
-      Y0.Y = SimState->Cubes[CubeIndex].TVelocity;
-      Y = Euler(MovementFunction, dt, Y0, SimState->Cubes[CubeIndex].Forces, SimState->Cubes[CubeIndex].Mass);
-      SimState->Cubes[CubeIndex].Position = Y.X;
-      SimState->Cubes[CubeIndex].TVelocity = Y.Y;
-
-      // NOTE(Jovan): Rotational
-      Y0.X = SimState->Cubes[CubeIndex].Angles;
-      Y0.Y = SimState->Cubes[CubeIndex].RVelocity;
-      Y = Euler(RotationFunction, dt, Y0, SimState->Cubes[CubeIndex].Torque, SimState->Cubes[CubeIndex].MOI);
-      SimState->Cubes[CubeIndex].Angles = Y.X;
-      SimState->Cubes[CubeIndex].RVelocity = Y.Y;
-
-      // NOTE(Jovan): Update states and clear the forces/torques
-      UpdateVertices(SimState, CubeIndex);
-      CubeClearForces(SimState, CubeIndex);
+      SimState->Cubes[CubeIndex].Position += dt * SimState->Cubes[CubeIndex].TVelocity;
+      SimState->Cubes[CubeIndex].Angles += dt * SimState->Cubes[CubeIndex].RVelocity;
     }
-  
   // NOTE(Jovan): End physics stuff
   // ------------------------------
   
