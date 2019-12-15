@@ -760,7 +760,7 @@ if(N == glm::vec3(0.0))
   // NOTE(Jovan): 1 / (JMJ)
   JMJ = 1.0f / JMJ;
   // NOTE(Jovan): Baumgarte
-  real32 Beta = 0.05f;
+  real32 Beta = 0.2f;
   // NOTE(Jovan): Bias
   real32 B = Beta * Depth/dt;
   // NOTE(Jovan): Velocities
@@ -774,11 +774,14 @@ if(N == glm::vec3(0.0))
   real32 Impulse = 0;
   while(Iter--)
     {
-      // TODO(Jovan): Update depth/position here?
+      // real32 Projection = glm::dot((V1 + glm::cross(W1, R1) - V2 - glm::cross(W2, R2)), N);
+      // if(Projection < 0)
+      // 	{
+      // 	  break;
+      // 	}
       // NOTE(Jovan): Derivative of V
       glm::vec3 dV = V1 + glm::cross(W1, N) - V2 - glm::cross(W2, N);
       real32 JdV = glm::dot(dV, N);
-
       real32 Lambda = -(JdV + B) * JMJ;
 
       // NOTE(Jovan): Accumulating and clamping impulse
