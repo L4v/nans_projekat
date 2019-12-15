@@ -150,7 +150,7 @@ HandleInput(sdl_state* State, sdl_input* Input, real32 dt)
   // TODO(Jovan): For debugging
   if(Input->KeyboardController.DebugReset.EndedDown)
     {
-      State->Cubes[0].Position = glm::vec3(2.0, 1.5, 2.1);
+      State->Cubes[0].Position = glm::vec3(2.0, 1.5, 2.0);
       State->Cubes[0].TVelocity = glm::vec3(0.0f);
       State->Cubes[0].RVelocity = glm::vec3(0.0f);
       
@@ -371,6 +371,7 @@ AddSupport(sdl_state* State, glm::vec3 Direction)
     {
       NewVertex = CalculateSupport(State, Direction);
     }
+  
   if(glm::dot(Direction, NewVertex.P) >= 0)
     {
       Result = 1;
@@ -379,6 +380,31 @@ AddSupport(sdl_state* State, glm::vec3 Direction)
     {
       Result = 0;
     }
+  return Result;
+}
+
+internal glm::vec3
+ClosestPointOnLine(glm::vec3 A, glm::vec3 B, glm::vec3 Target,
+		   real32* U, real32* V)
+{
+  glm::vec3 Result = glm::vec3(0.0f);
+  glm::vec3 LineSegment = glm::normalize(B - A);
+  real32 Length = glm::length(LineSegment);
+  *V = glm::dot(-A, LineSegment) / Length;
+  *U = glm::dot(B, LineSegment) / Length;
+  if(*U <= 0.0f)
+    {
+      Result = B;
+    }
+  else if(*V <= 0.0f)
+    {
+      Result = A;
+    }
+  else
+    {
+      Result = (*U) * A + (*V) * B;
+    }
+
   return Result;
 }
 
@@ -405,14 +431,44 @@ EvolveSimplex(sdl_state* State, glm::vec3 PositionA, glm::vec3 PositionB)
       }break;
     case 2:
       {
-	// NOTE(Jovan): Form line from first 2 vertices
+	// // NOTE(Jovan): Form line from first 2 vertices
 	glm::vec3 AB = Simplex->Vertices[1].P - Simplex->Vertices[0].P;
-	// NOTE(Jovan): Form line from origin to A
+	// // NOTE(Jovan): Form line from origin to A
 	glm::vec3 A0 = -1.0f * Simplex->Vertices[0].P;
 
-	// NOTE(Jovan): Direction perpendicular to AB in the direction
-	// of the origin
-	Direction = glm::cross(glm::cross(AB, A0), AB);
+	// // NOTE(Jovan): Direction perpendicular to AB in the direction
+	// // of the origin
+	// Direction = glm::cross(glm::cross(AB, A0), AB);
+	// /* STUDY TODO IMPORTANT(Jovan):
+	//  * Possible location for collision error
+	//  * Direction vector will be a 0 vector if the origin is
+	//  * on the edge of the Miknowski sum
+	// */
+	// if(Direction == glm::vec3(0.0))
+	//   {
+	//     // TODO(Jovan): How to handle???
+	//   }
+	real32 U = 0.0f;
+	real32 V = 0.0f;
+	glm::vec3 Origin = glm::vec3(0.0);
+	glm::vec3 ClosestPoint = ClosestPointOnLine(Simplex->Vertices[0].P,
+						    Simplex->Vertices[1].P,
+						    Origin, &U, &V);
+
+	if(V <= 0.0f)
+	  {
+	    RemoveVertex(Simplex, 1);
+	    Direction = -ClosestPoint;
+	  }
+	else if(U <= 0.0f)
+	  {
+	    RemoveVertex(Simplex, 0);
+	    Direction = -ClosestPoint;
+	  }
+	else
+	  {
+	    Direction = -ClosestPoint;
+	  }
       }break;
     case 3:
       {
@@ -516,7 +572,6 @@ internal void
 Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
 	    real32* U, real32* V, real32* W)
 {
-  // TODO(Jovan): Resolve NaN's ?
   glm::vec3 V0 = B - A, V1 = C - A, V2 = P - A;
   real32 D00 = glm::dot(V0, V0);
   real32 D01 = glm::dot(V0, V1);
@@ -570,7 +625,7 @@ ResolveCollision(sdl_state* State, sdl_input* Input, collision_type Type, contac
   PushTriangle(Triangle, A, C, D); // ACD
   PushTriangle(Triangle, A, D, B); // ADB
   PushTriangle(Triangle, B, D, C); // BDC
-  Assert(Simplex->Count >= 4);
+  //Assert(Simplex->Count >= 4);
   while(CurrIter++ <= MAX_EPA_ITERATIONS)
     {
       // NOTE(Jovan): Find the closest triangle
@@ -619,55 +674,7 @@ ResolveCollision(sdl_state* State, sdl_input* Input, collision_type Type, contac
 	  // TODO(Jovan): Probably not needed
 	  Info->Normal = CollisionNormal;
 	  return ClosestIndex;
-#if 0
-	  // NOTE(Jovan): Impulse test
-	  // -------------------------
-	  glm::vec3 RelativeAtoB = State->Cubes[0].TVelocity + State->Cubes[0].TVelocity;
-	  real32 ContactVelocity = glm::dot(RelativeAtoB, CollisionNormal);
-	  // NOTE(Jovan): If they're separating, do nothing
-	  if(ContactVelocity > 0)
-	    {
-	      return ClosestIndex;
-	    }
-	  real32 MassA = State->Cubes[0].Mass;
-	  real32 MassB = State->Cubes[1].Mass;
-	  real32 InertiaA = State->Cubes[0].MOI;
-	  real32 InertiaB = State->Cubes[1].MOI;
-	  real32 InvA = 1.0f / MassA;
-	  real32 InvB = 1.0f / MassB;
-	  glm::vec3 rA = CollisionPoint - State->Cubes[0].Position;
-	  glm::vec3 rAP = glm::cross(rA, CollisionNormal);
-	  glm::vec3 rB = CollisionPoint - State->Cubes[1].Position;
-	  glm::vec3 rBP = glm::cross(rB, CollisionNormal);
-	  real32 RotA = glm::dot(CollisionNormal, glm::cross(glm::cross(rA, CollisionNormal) / InertiaA, rA));
-	  real32 RotB = glm::dot(CollisionNormal, glm::cross(glm::cross(rB, CollisionNormal) / InertiaB, rB));
-	  // NOTE(Jovan): Coefficient of restitution
-	  real32 e = 0.0f;
-	  real32 ImpulseNumerator = (-(1.0f + e) * (glm::dot(RelativeAtoB, CollisionNormal)));
-	  real32 ImpulseDenominator = InvA + InvB + RotA + RotB;
-	  real32 Impulse =  ImpulseNumerator / ImpulseDenominator;
-
-	  State->Cubes[0].TVelocity += InvA * (Impulse * CollisionNormal) ;
-	  State->Cubes[1].TVelocity -= InvB * (Impulse * CollisionNormal);
-	  
-	  State->Cubes[0].RVelocity += glm::cross(rA, (CollisionNormal * Impulse)) / InertiaA;
-	  //State->Cubes[1].RVelocity -= glm::cross(rB, (CollisionNormal * Impulse)) / InertiaB;
-	  real32 PenAllowance = 0.01f;
-	  real32 PenCorrection = 0.4f;
-	  glm::vec3 Correction = (std::max(Depth - PenAllowance, 0.0f) / (InvA + InvB)) *
-	    PenCorrection * CollisionNormal;
-	  State->Cubes[0].Position += InvA * Correction;
-	  State->Cubes[1].Position -= InvB * Correction;
-	  // TODO(Jovan): Testing
-	  //State->Cubes[0].Position += CollisionNormal * Depth;
-	  // State->Cubes[1].Position += CollisionNormal * Depth;
-
-	  // NOTE(Jovan): End impulse test
-	  // ----------------------------
-# endif
 	}
-
-      // TODO(Jovan): Triangles that should be removed are not for some reason ???
       // NOTE(Jovan): Removing triangle that can be "seen" by the new point
       for(uint32 TriangleIndex = 0;
 	  TriangleIndex < Triangle->Count;)
@@ -731,9 +738,9 @@ IntegrateForces(sdl_state* State, uint32 CubeIndex, real32 dt)
 
 internal void
 Constraint(sdl_state* State, int32 IndexA, int32 IndexB, glm::vec3 N,
-	   contact_info* InfoA, contact_info* InfoB, real32 DT)
+	   contact_info* InfoA, contact_info* InfoB, real32 dt)
 {
-  if(N == glm::vec3(0.0))
+if(N == glm::vec3(0.0))
     return;
 
   // NOTE(Jovan): Calculating J(M^-1)(J^T)
@@ -755,13 +762,14 @@ Constraint(sdl_state* State, int32 IndexA, int32 IndexB, glm::vec3 N,
   // NOTE(Jovan): Baumgarte
   real32 Beta = 0.05f;
   // NOTE(Jovan): Bias
-  real32 B = Beta * Depth/DT;
+  real32 B = Beta * Depth/dt;
   // NOTE(Jovan): Velocities
   glm::vec3 V1 = State->Cubes[IndexA].TVelocity;
   glm::vec3 V2 = State->Cubes[IndexB].TVelocity;
   glm::vec3 W1 = State->Cubes[IndexA].RVelocity;
   glm::vec3 W2 = State->Cubes[IndexB].RVelocity;
   // TODO(Jovan): Restitution bias
+  // TODO(Jovan): Friction?
   int32 Iter = 10;
   real32 Impulse = 0;
   while(Iter--)
@@ -856,7 +864,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       
       SimState->Cubes[0].Position = glm::vec3(2.1,
 					      2.5,
-					      2.0);
+					      2.1);
       SimState->Cubes[0].TVelocity = glm::vec3(0.0);
       SimState->Cubes[0].Forces = glm::vec3(0.0);
       
@@ -890,8 +898,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
       // NOTE(Jovan): Sphere init
       SimState->SphereCount = 1;
-      SimState->Spheres[0].Position = glm::vec3(2.0,
-						2.0,
+      SimState->Spheres[0].Position = glm::vec3(0.0,
+						0.0,
 						0.0);
       SimState->Spheres[0].XAngle = 0.0f;
       SimState->Spheres[0].YAngle = 0.0f;
@@ -951,6 +959,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   contact_info A = {};
   contact_info B = {};
   glm::vec3 Normal;
+  IntegrateForces(SimState, 0, dt);
+  IntegrateForces(SimState, 1, dt);
   if(CollisionHappened && Fakes-- <= 0)
     {
       Fakes = 0;
@@ -978,16 +988,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   //CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   //CubeAddTorque(SimState,0, glm::vec3(1.0));
-  // for(uint32 CubeIndex = 0;
-  //     CubeIndex < SimState->CubeCount;
-  //     ++CubeIndex)
-  //   {
-  //     IntegrateForces(SimState, CubeIndex, dt);
-
-  //   }
-
-  IntegrateForces(SimState, 0, dt);
-  IntegrateForces(SimState, 1, dt);  
+  
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
       ++CubeIndex)
@@ -1268,5 +1269,5 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   ClearTriangles(SimState->Triangle);
   ClearEdges(SimState->Edge);
   // NOTE(Jovan): Clear accumulated impulse
-  SimState->AccumI = 0.0f;
+  //SimState->AccumI = 0.0f;
 }
