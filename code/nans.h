@@ -215,8 +215,6 @@ struct plane
   glm::vec3 Position;
   glm::vec3 Vertices[4];
   real32 Size;
-  real32 Mass;
-  real32 MOI;
 };
 
 
@@ -226,11 +224,11 @@ struct cube
   glm::vec3 Vertices[8];
   
   glm::vec3 Position;
-  glm::vec3 TVelocity;
+  glm::vec3 V;
   glm::vec3 Forces;
 
   glm::vec3 Angles;
-  glm::vec3 RVelocity;
+  glm::vec3 W;
   glm::vec3 Torque;
   real32 Size;
   real32 Mass;
@@ -253,8 +251,8 @@ struct sdl_state
   real32 Depth;
 
   // TODO(jovan): Keep like this?
-  uint32 IndexA;
-  uint32 IndexB;
+  int32 IndexA;
+  int32 IndexB;
   collision_type CurrentCollisionType;
   
   // NOTE(Jovan): Vertices for the simplex

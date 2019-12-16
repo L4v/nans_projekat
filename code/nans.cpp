@@ -151,12 +151,14 @@ HandleInput(sdl_state* State, sdl_input* Input, real32 dt)
   if(Input->KeyboardController.DebugReset.EndedDown)
     {
       State->Cubes[0].Position = glm::vec3(2.0, 1.5, 2.0);
-      State->Cubes[0].TVelocity = glm::vec3(0.0f);
-      State->Cubes[0].RVelocity = glm::vec3(0.0f);
+      State->Cubes[0].V = glm::vec3(0.0f);
+      State->Cubes[0].W = glm::vec3(0.0f);
+      State->Cubes[0].Angles = glm::vec3(0.0f);
       
       State->Cubes[1].Position = glm::vec3(2.0, 0.0, 2.0);
-      State->Cubes[1].TVelocity = glm::vec3(0.0f);
-      State->Cubes[1].RVelocity = glm::vec3(0.0f);
+      State->Cubes[1].V = glm::vec3(0.0f);
+      State->Cubes[1].W = glm::vec3(0.0f);
+      State->Cubes[1].Angles = glm::vec3(0.0f);
     }
 }
 
@@ -275,11 +277,10 @@ ClearTriangles(triangle* Triangle)
 internal void
 FloorUpdateVertices(sdl_state* State)
 {
-  glm::mat4 Model = State->Floor.Model;
-  State->Floor.Vertices[0] = glm::vec3(Model * glm::vec4(50.0f, -0.5f, 50.0f, 1.0));
-  State->Floor.Vertices[1] = glm::vec3(Model * glm::vec4(-50.0f, -0.5f, 50.0f, 1.0));
-  State->Floor.Vertices[2] = glm::vec3(Model * glm::vec4(-50.0f, -0.5f, -50.0f, 1.0));
-  State->Floor.Vertices[3] = glm::vec3(Model * glm::vec4(50.0f, -0.5f, -50.0f, 1.0));
+  State->Floor.Vertices[0] = glm::vec3(50.0f, -0.5f, 50.0f);
+  State->Floor.Vertices[1] = glm::vec3(-50.0f, -0.5f, 50.0f);
+  State->Floor.Vertices[2] = glm::vec3(-50.0f, -0.5f, -50.0f);
+  State->Floor.Vertices[3] = glm::vec3(50.0f, -0.5f, -50.0f);
 }
 
 internal void
@@ -331,6 +332,30 @@ GetSphereSupport(sdl_state* State, int32 SphereIndex, glm::vec3 Direction)
   return Result;
 }
 
+internal glm::vec3
+GetFloorSupport(sdl_state* State, glm::vec3 Direction)
+{
+  real32 MaxDistance = -FLT_MAX;
+  glm::vec3 Result = glm::vec3(0.0f);
+  plane* Floor = &State->Floor;
+
+  // NOTE(Jovan) 4 vertices in a plane
+  for(uint32 VertexIndex = 0;
+      VertexIndex < 4;
+      ++VertexIndex)
+    {
+      glm::vec3 CurrVertex = Floor->Vertices[VertexIndex];
+      real32 Distance = glm::dot(CurrVertex, Direction);
+      if(Distance > MaxDistance)
+	{
+	  MaxDistance = Distance;
+	  Result = CurrVertex;
+	}
+    }
+
+  return Result;
+}
+
 internal vertex
 CalculateSupport(sdl_state* State, glm::vec3 Direction)
 {
@@ -355,7 +380,20 @@ CalculateSupport(sdl_state* State, glm::vec3 Direction)
       }break;
     case CP:
       {
-	// TODO(Jovan): Implement
+	glm::vec3 SupportA, SupportB;
+	if(State->IndexA != -1)
+	  {
+	    SupportA = GetCubeSupport(State, State->IndexA, Direction);
+	    SupportB = GetFloorSupport(State, -1.0f * Direction);
+	  }
+	else
+	  {
+	    SupportA = GetFloorSupport(State, -1.0f * Direction); 
+	    SupportB = GetCubeSupport(State, State->IndexB, Direction);
+	  }
+	Result.P = SupportA - SupportB;
+	Result.SupA = SupportA;
+	PushVertex(State->Simplex, Result);
       }break;
     }
 
@@ -367,10 +405,7 @@ AddSupport(sdl_state* State, glm::vec3 Direction)
 {
   bool32 Result = 0;
   vertex NewVertex = {};
-  if(State->CurrentCollisionType == CC)
-    {
-      NewVertex = CalculateSupport(State, Direction);
-    }
+  NewVertex = CalculateSupport(State, Direction);
   
   if(glm::dot(Direction, NewVertex.P) >= 0)
     {
@@ -412,8 +447,9 @@ internal evolve_result
 EvolveSimplex(sdl_state* State, glm::vec3 PositionA, glm::vec3 PositionB)
 {
   // TODO(Jovan): For now, under the assumption that it's 2 cubes
+  // IMPORTANT TODO(Jovan): REDO GJK
   evolve_result Result = NoIntersection;
-  glm::vec3 Direction = glm::vec3(0.0f);
+  glm::vec3 Direction = glm::normalize(glm::vec3(1.0f));
   simplex* Simplex = State->Simplex;
   uint32 NoVertices = Simplex->Count;
   switch(NoVertices)
@@ -422,7 +458,8 @@ EvolveSimplex(sdl_state* State, glm::vec3 PositionA, glm::vec3 PositionB)
       {
 	// NOTE(Jovan): Best presumption of dir is the relative direction
 	// of the 2 shapes
-	Direction = PositionB - PositionA;
+	
+	//Direction = PositionB - PositionA;
       }break;
     case 1:
       {
@@ -454,7 +491,6 @@ EvolveSimplex(sdl_state* State, glm::vec3 PositionA, glm::vec3 PositionB)
 	glm::vec3 ClosestPoint = ClosestPointOnLine(Simplex->Vertices[0].P,
 						    Simplex->Vertices[1].P,
 						    Origin, &U, &V);
-
 	if(V <= 0.0f)
 	  {
 	    RemoveVertex(Simplex, 1);
@@ -545,7 +581,7 @@ EvolveSimplex(sdl_state* State, glm::vec3 PositionA, glm::vec3 PositionB)
 }
 
 internal bool32
-DetectCollisions(sdl_state* State, collision_type Type)
+DetectCollisions(sdl_state* State)
 {
   bool32 Result = 0;
   evolve_result EvolutionResult = StillEvolving;
@@ -553,7 +589,35 @@ DetectCollisions(sdl_state* State, collision_type Type)
   int32 BIndex = State->IndexB;
   while((EvolutionResult == StillEvolving) && (State->GJKIteration++ <= MAX_GJK_ITERATIONS))
     {
-      EvolutionResult = EvolveSimplex(State, State->Cubes[AIndex].Position, State->Cubes[BIndex].Position);
+      switch(State->CurrentCollisionType)
+	{
+	case CC:
+	  {
+	    EvolutionResult = EvolveSimplex(State, State->Cubes[AIndex].Position,
+					    State->Cubes[BIndex].Position);
+	  }break;
+	case CS:
+	  {
+	    // TODO(Jovan): Implement
+	  }break;
+	case SS:
+	  {
+	    // TODO(Jovan): Implement
+	  }break;
+	case CP:
+	  {
+	    if(AIndex == -1)
+	      {
+		EvolutionResult = EvolveSimplex(State, State->Floor.Position,
+						State->Cubes[BIndex].Position);
+	      }
+	    else
+	      {
+		EvolutionResult = EvolveSimplex(State, State->Cubes[AIndex].Position,
+						State->Floor.Position);
+	      }
+	  }break;
+	}
     }
   
   if(EvolutionResult == FoundIntersection)
@@ -609,7 +673,7 @@ DrawTriangles(sdl_state* State, sdl_render* Render)
 }
 
 internal int32
-ResolveCollision(sdl_state* State, sdl_input* Input, collision_type Type, contact_info* Info)
+ResolveCollision(sdl_state* State, sdl_input* Input, contact_info* Info)
 {
   int32 CurrIter = 0;
   simplex* Simplex = State->Simplex;
@@ -721,15 +785,15 @@ IntegrateForces(sdl_state* State, uint32 CubeIndex, real32 dt)
   phys_return Y = {};
   // NOTE(Jovan): Translational
   Y0.X = State->Cubes[CubeIndex].Position;
-  Y0.Y = State->Cubes[CubeIndex].TVelocity;
+  Y0.Y = State->Cubes[CubeIndex].V;
   Y = Euler(MovementFunction, dt, Y0, State->Cubes[CubeIndex].Forces, State->Cubes[CubeIndex].Mass);
-  State->Cubes[CubeIndex].TVelocity = Y.Y;
+  State->Cubes[CubeIndex].V = Y.Y;
 
   // NOTE(Jovan): Rotational
   Y0.X = State->Cubes[CubeIndex].Angles;
-  Y0.Y = State->Cubes[CubeIndex].RVelocity;
+  Y0.Y = State->Cubes[CubeIndex].W;
   Y = Euler(RotationFunction, dt, Y0, State->Cubes[CubeIndex].Torque, State->Cubes[CubeIndex].MOI);
-  State->Cubes[CubeIndex].RVelocity = Y.Y;
+  State->Cubes[CubeIndex].W = Y.Y;
   
   // NOTE(Jovan): Update states and clear the forces/torques
   UpdateVertices(State, CubeIndex);
@@ -762,12 +826,12 @@ if(N == glm::vec3(0.0))
   // NOTE(Jovan): Baumgarte
   real32 Beta = 0.2f;
   // NOTE(Jovan): Bias
-  real32 B = Beta * Depth/dt;
+  real32 B = Beta/dt * Depth;
   // NOTE(Jovan): Velocities
-  glm::vec3 V1 = State->Cubes[IndexA].TVelocity;
-  glm::vec3 V2 = State->Cubes[IndexB].TVelocity;
-  glm::vec3 W1 = State->Cubes[IndexA].RVelocity;
-  glm::vec3 W2 = State->Cubes[IndexB].RVelocity;
+  glm::vec3 V1 = State->Cubes[IndexA].V;
+  glm::vec3 V2 = State->Cubes[IndexB].V;
+  glm::vec3 W1 = State->Cubes[IndexA].W;
+  glm::vec3 W2 = State->Cubes[IndexB].W;
   // TODO(Jovan): Restitution bias
   // TODO(Jovan): Friction?
   int32 Iter = 10;
@@ -801,11 +865,11 @@ if(N == glm::vec3(0.0))
   glm::vec3 AngularI1 = RN1 * Impulse;
   glm::vec3 AngularI2 = RN2 * Impulse;
   // NOTE(Jovan): Applying linear impulses
-  State->Cubes[IndexA].TVelocity += (1.0f / State->Cubes[IndexA].Mass) * LinearImpulse;
-  State->Cubes[IndexB].TVelocity -= (1.0f / State->Cubes[IndexB].Mass) * LinearImpulse;
+  State->Cubes[IndexA].V += (1.0f / State->Cubes[IndexA].Mass) * LinearImpulse;
+  State->Cubes[IndexB].V -= (1.0f / State->Cubes[IndexB].Mass) * LinearImpulse;
   // NOTE(Jovan): Applying angular impulses
-  State->Cubes[IndexA].RVelocity += InvI1 * AngularI1;
-  State->Cubes[IndexB].RVelocity -= InvI2 * AngularI2;
+  State->Cubes[IndexA].W += InvI1 * AngularI1;
+  State->Cubes[IndexB].W -= InvI2 * AngularI2;
 }
 
 extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
@@ -861,20 +925,17 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
       
       // NOTE(Jovan): Cube init
-      SimState->CubeCount = 2;
+      SimState->CubeCount = 3;
       SimState->Cubes[0].Model = glm::mat4(1.0);
       UpdateVertices(SimState, 0);
-      
       SimState->Cubes[0].Position = glm::vec3(2.1,
 					      2.5,
 					      2.1);
-      SimState->Cubes[0].TVelocity = glm::vec3(0.0);
+      SimState->Cubes[0].V = glm::vec3(0.0);
       SimState->Cubes[0].Forces = glm::vec3(0.0);
-      
       SimState->Cubes[0].Angles = glm::vec3(0.0);
-     SimState->Cubes[0].RVelocity = glm::vec3(0.0);
+     SimState->Cubes[0].W = glm::vec3(0.0);
       SimState->Cubes[0].Torque = glm::vec3(0.0);
-      
       SimState->Cubes[0].Size = 1.0f;
       SimState->Cubes[0].Mass = 1.0f;
       SimState->Cubes[0].MOI = (SimState->Cubes[0].Mass / 12.0f) *
@@ -882,22 +943,28 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
       SimState->Cubes[1].Model = glm::mat4(1.0);
       UpdateVertices(SimState, 1);
-      
-      SimState->Cubes[1].Position = glm::vec3(2.0,
-					      1.0,
-					      2.0);
-      SimState->Cubes[1].TVelocity = glm::vec3(0.0);
+      SimState->Cubes[1].Position = glm::vec3(4.0, 3.0, 2.0);
+      SimState->Cubes[1].V = glm::vec3(0.0);
       SimState->Cubes[1].Forces = glm::vec3(0.0);
-      
       SimState->Cubes[1].Angles = glm::vec3(0.0);
-      SimState->Cubes[1].RVelocity = glm::vec3(0.0);
+      SimState->Cubes[1].W = glm::vec3(0.0);
       SimState->Cubes[1].Torque = glm::vec3(0.0);
-      
       SimState->Cubes[1].Size = 1.0f;
       SimState->Cubes[1].Mass = 10.0f;
       SimState->Cubes[1].MOI = (SimState->Cubes[1].Mass / 12.0f) *
 	(2.0f * SimState->Cubes[1].Size * SimState->Cubes[1].Size);
-      UpdateVertices(SimState, 1);
+      
+      SimState->Cubes[2].Model = glm::mat4(1.0);
+      UpdateVertices(SimState, 0);
+      SimState->Cubes[2].Position = glm::vec3(0.0f);
+      SimState->Cubes[2].V = glm::vec3(0.0);
+      SimState->Cubes[2].Forces = glm::vec3(0.0);
+      SimState->Cubes[2].Angles = glm::vec3(0.0);
+     SimState->Cubes[2].W = glm::vec3(0.0);
+      SimState->Cubes[2].Torque = glm::vec3(0.0);
+      SimState->Cubes[2].Size = 100.0f;
+      SimState->Cubes[2].Mass = FLT_MAX;
+      SimState->Cubes[2].MOI = FLT_MAX;
 
       // NOTE(Jovan): Sphere init
       SimState->SphereCount = 1;
@@ -953,51 +1020,99 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Physics stuff
   // --------------------------
-  // TODO(Jovan): Avoiding 2 "fake" collisions at start of simulation
-  local_persist int32 Fakes = 2;
-      SimState->IndexA = 1;
-      SimState->IndexB = 0;
-  bool32 CollisionHappened = DetectCollisions(SimState, CC);
   int32 Closest = -1;
   contact_info A = {};
   contact_info B = {};
   glm::vec3 Normal;
-  IntegrateForces(SimState, 0, dt);
-  IntegrateForces(SimState, 1, dt);
-  if(CollisionHappened && Fakes-- <= 0)
+  bool32 CollisionHappened;
+  // TODO(Jovan): Avoiding 2 "fake" collisions at start of simulation
+  // TODO IMPORTANT (Jovan): Generalize collision AND STABILIZE PLS
+  local_persist int32 Fakes = 2;
+  for(uint32 CubeIndex1 = 0;
+      CubeIndex1 < SimState->CubeCount;
+      ++CubeIndex1)
     {
-      Fakes = 0;
-      // NOTE(Jovan): For B to A
-      Closest = ResolveCollision(SimState, Input, CC, &B);
-
-      // NOTE(Jovan): Clear B to A collision info so GJK can start over
-      // for A to B
-      ClearTriangles(SimState->Triangle);
-      ClearEdges(SimState->Edge);
-      ClearVertices(SimState->Simplex);
-
-      // NOTE(Jovan): For A to B
-      SimState->IndexA = 0;
-      SimState->IndexB = 1;
-      if(DetectCollisions(SimState, CC))
+      for(uint32 CubeIndex2 = CubeIndex1;
+	  CubeIndex2 < SimState->CubeCount;
+	  ++CubeIndex2)
 	{
-	  printf("Second happened");
+	  if(CubeIndex1 == CubeIndex2)
+	    {
+	      continue;
+	    }
+	  SimState->IndexA = CubeIndex2;
+	  SimState->IndexB = CubeIndex1;
+	  SimState->CurrentCollisionType = CC;
+	  CollisionHappened = DetectCollisions(SimState);
+	  Closest = -1;
+	  A = {};
+	  B = {};
+	  IntegrateForces(SimState, CubeIndex1, dt);
+	  IntegrateForces(SimState, CubeIndex2, dt);
+	  // TODO(Jovan): Manage cube collisions
+	  if(CollisionHappened)
+	    {
+	      Fakes = 0;
+	      // NOTE(Jovan): For B to A
+	      Closest = ResolveCollision(SimState, Input, &B);
+
+	      // NOTE(Jovan): Clear B to A collision info so GJK can start over
+	      // for A to B
+	      ClearTriangles(SimState->Triangle);
+	      ClearEdges(SimState->Edge);
+	      ClearVertices(SimState->Simplex);
+
+	      // NOTE(Jovan): For A to B
+	      SimState->IndexA = CubeIndex1;
+	      SimState->IndexB = CubeIndex2;
+	      if(DetectCollisions(SimState))
+		{
+		  printf("Second happened");
+		}
+	      Closest = ResolveCollision(SimState, Input, &A);
+	      Normal = -SimState->Triangle->N[Closest];
+	      Constraint(SimState, CubeIndex1, CubeIndex2, Normal, &A, &B, dt);
+	      ClearTriangles(SimState->Triangle);
+	      ClearEdges(SimState->Edge);
+	      ClearVertices(SimState->Simplex);
+	    }
 	}
-      Closest = ResolveCollision(SimState, Input, CC, &A);
-      Normal = -SimState->Triangle->N[Closest];
-      Constraint(SimState, 0, 1, Normal, &A, &B, dt);
     }
+  // FloorUpdateVertices(SimState);
+  // // NOTE(Jovan): Floor collisions
+  // SimState->IndexA = -1;
+  // SimState->IndexB = 0;
+  // SimState->CurrentCollisionType = CC;
+  // bool32 CollisionFloor = DetectCollisions(SimState);
+  // int32 FloorFakes = 2;
+  // if(CollisionFloor && FloorFakes-- <= 0)
+  //   {
+  //     FloorFakes = 0;
+  //     ResolveCollision(SimState, Input, &B);
+  //     ClearTriangles(SimState->Triangle);
+  //     ClearEdges(SimState->Edge);
+  //     ClearVertices(SimState->Simplex);
 
-
-  //CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  //     SimState->IndexA = 0;
+  //     SimState->IndexB = -1;
+  //     SimState->CurrentCollisionType = CP;
+  //     DetectCollisions(SimState);
+  //     Closest = ResolveCollision(SimState, Input, &A);
+  //     Normal = -SimState->Triangle->N[Closest];
+  //     printf("Happening!\n");
+  //     Constraint(SimState, 0, -1, Normal, &A, &B, dt);
+  //   }
+  
+  CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  CubeAddForce(SimState, 1, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   //CubeAddTorque(SimState,0, glm::vec3(1.0));
   
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
       ++CubeIndex)
     {
-      SimState->Cubes[CubeIndex].Position += dt * SimState->Cubes[CubeIndex].TVelocity;
-      SimState->Cubes[CubeIndex].Angles += dt * SimState->Cubes[CubeIndex].RVelocity;
+      SimState->Cubes[CubeIndex].Position += dt * SimState->Cubes[CubeIndex].V;
+      SimState->Cubes[CubeIndex].Angles += dt * SimState->Cubes[CubeIndex].W;
     }
   // NOTE(Jovan): End physics stuff
   // ------------------------------
@@ -1129,10 +1244,10 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SetUniformM4(Render->Shaders[0], "View", View);
   SetUniformM4(Render->Shaders[0], "Projection", Projection);
   real32 FloorSize = 1;
-  Model = glm::mat4(1.0);
-  Model = glm::translate(Model, glm::vec3(0.0, 0.0, 0.0));
-  Model = glm::scale(Model, glm::vec3(FloorSize, 0, FloorSize));
-  SetUniformM4(Render->Shaders[0], "Model", Model);
+  SimState->Floor.Model = glm::mat4(1.0);
+  SimState->Floor.Model = glm::translate(SimState->Floor.Model, glm::vec3(0.0, 0.0, 0.0));
+  SimState->Floor.Model = glm::scale(SimState->Floor.Model, glm::vec3(FloorSize, 0, FloorSize));
+  SetUniformM4(Render->Shaders[0], "Model", SimState->Floor.Model);
   glBindVertexArray(Render->VAOs[2]);
   glDrawArrays(GL_TRIANGLES, 0, 6);
   glBindVertexArray(0);
@@ -1207,9 +1322,19 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].Angles.x), glm::vec3(1.0f, 0.0f, 0.0f));
       Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].Angles.y), glm::vec3(0.0f, 1.0f, 0.0f));
       Model = glm::rotate(Model, glm::radians(SimState->Cubes[CubeIndex].Angles.z), glm::vec3(0.0f, 0.0f, 1.0f));
-      Model = glm::scale(Model, glm::vec3(SimState->Cubes[CubeIndex].Size,
-					  SimState->Cubes[CubeIndex].Size,
-					  SimState->Cubes[CubeIndex].Size));
+      if(CubeIndex == 2)
+	{
+	  Model = glm::scale(Model, glm::vec3(SimState->Cubes[CubeIndex].Size,
+					      0.01,
+					      SimState->Cubes[CubeIndex].Size));
+	  UpdateVertices(SimState, 2);
+	}
+      else
+	{
+	  Model = glm::scale(Model, glm::vec3(SimState->Cubes[CubeIndex].Size,
+					      SimState->Cubes[CubeIndex].Size,
+					      SimState->Cubes[CubeIndex].Size));
+	}
       SimState->Cubes[CubeIndex].Model = Model;
       SetUniformM4(Render->Shaders[0], "Model", Model);
       glBindVertexArray(Render->VAOs[0]);
