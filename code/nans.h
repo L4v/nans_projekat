@@ -68,13 +68,22 @@ typedef double real64;
      /* NOTE(Jovan): Types of collisions
 	CC - CUBE x CUBE
 	CS - CUBE x SPHERE
+	SC - SPHERE x CUBE
 	SS - SPHERE x SPHERE
-	CP - CUBE x PLANE
+	CP - CUBE x FLOOR
+	PC - FLOOR x CUBE
+	SP - SPHERE x FLOOR
+	PS - FLOOR x SPHERE
      */
      CC = 0,
      CS,
+     SC,
+     CF,
+     FC,
+     //
      SS,
-     CP
+     SF,
+     FS
     };
 
 enum evolve_result
@@ -237,11 +246,19 @@ struct cube
 
 struct sphere
 {
+  // TODO(Jovan): Is the model required?
+  glm::mat4 Model;
   glm::vec3 Position;
+  glm::vec3 V;
+  glm::vec3 Forces;
+
+  glm::vec3 Angles;
+  glm::vec3 W;
+  glm::vec3 Torque;
+  
   real32 Radius;
-  real32 XAngle;
-  real32 YAngle;
-  real32 ZAngle;
+  real32 Mass;
+  real32 MOI;
 };
 
 
@@ -265,7 +282,8 @@ struct sdl_state
   
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
-  plane Floor;
+  // NOTE(Jovan): The floor is just a giant squished cube
+  cube Floor;
   
   sdl_camera Camera;
   uint32 CubeCount;
