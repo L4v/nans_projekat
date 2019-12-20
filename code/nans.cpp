@@ -163,6 +163,11 @@ HandleInput(sdl_state* State, sdl_input* Input, real32 dt)
       State->Cubes[1].V = glm::vec3(0.0f);
       State->Cubes[1].W = glm::vec3(0.0f);
       State->Cubes[1].Angles = glm::vec3(0.0f);
+      
+      State->Cubes[2].Position = glm::vec3(2.0, 4.0, 2.0);
+      State->Cubes[2].V = glm::vec3(0.0f);
+      State->Cubes[2].W = glm::vec3(0.0f);
+      State->Cubes[2].Angles = glm::vec3(0.0f);
     }
 }
 
@@ -1134,10 +1139,10 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
       
       // NOTE(Jovan): Cube init
-      SimState->CubeCount = 2;
+      SimState->CubeCount = 3;
       SimState->Cubes[0].Model = glm::mat4(1.0);
       UpdateVertices(SimState, 0);
-      SimState->Cubes[0].Position = glm::vec3(0.0f);//(2.1, 2.5 ,2.1);
+      SimState->Cubes[0].Position = glm::vec3(2.0, 4.5f, 2.1);//(2.1, 2.5 ,2.1);
       SimState->Cubes[0].V = glm::vec3(0.0);
       SimState->Cubes[0].Forces = glm::vec3(0.0);
       SimState->Cubes[0].Angles = glm::vec3(0.0);
@@ -1150,7 +1155,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
       SimState->Cubes[1].Model = glm::mat4(1.0);
       UpdateVertices(SimState, 1);
-      SimState->Cubes[1].Position = glm::vec3(2.0, 3.5, 2.0);
+      SimState->Cubes[1].Position = glm::vec3(2.1, 3.5, 2.0);
       SimState->Cubes[1].V = glm::vec3(0.0);
       SimState->Cubes[1].Forces = glm::vec3(0.0);
       SimState->Cubes[1].Angles = glm::vec3(0.0);
@@ -1160,6 +1165,19 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Cubes[1].Mass = 10.0f;
       SimState->Cubes[1].MOI = (SimState->Cubes[1].Mass / 12.0f) *
 	(2.0f * SimState->Cubes[1].Size * SimState->Cubes[1].Size);
+      
+      SimState->Cubes[2].Model = glm::mat4(1.0);
+      UpdateVertices(SimState, 1);
+      SimState->Cubes[2].Position = glm::vec3(2.0, 1.5, 2.0);
+      SimState->Cubes[2].V = glm::vec3(0.0);
+      SimState->Cubes[2].Forces = glm::vec3(0.0);
+      SimState->Cubes[2].Angles = glm::vec3(0.0);
+      SimState->Cubes[2].W = glm::vec3(0.0);
+      SimState->Cubes[2].Torque = glm::vec3(0.0);
+      SimState->Cubes[2].Size = 1.0f;
+      SimState->Cubes[2].Mass = 10.0f;
+      SimState->Cubes[2].MOI = (SimState->Cubes[2].Mass / 12.0f) *
+	(2.0f * SimState->Cubes[2].Size * SimState->Cubes[2].Size);
 
       // NOTE(Jovan): Sphere init
       SimState->SphereCount = 2;
