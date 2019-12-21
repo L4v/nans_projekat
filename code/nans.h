@@ -264,6 +264,28 @@ struct sphere
   real32 MOI;
 };
 
+// NOTE(Jovan): Serves as info for a pair of 2 objects
+struct contact_pair
+{
+  // NOTE(Jovan): For identifying the type of collision
+  // so we know which types of objects to look at
+  collision_type Type;
+
+  // NOTE(Jovan): Impulse
+  real32 DeltaLambda;
+  real32 DeltaLambdaSum;
+  
+  // NOTE(Jovan): The intersection points
+  glm::vec3 PointA;
+  glm::vec3 PointB;
+
+  // NOTE(Jovan): Collision normal
+  glm::vec3 Normal;
+
+  // NOTE(Jovan): Indices of objects
+  int32 IndexA;
+  int32 IndexB;
+};
 
 struct sdl_state
 {
@@ -277,7 +299,9 @@ struct sdl_state
   simplex* Simplex;
   edge *Edge;
   triangle *Triangle;
-  
+
+  // TODO(jovan): Memory arenas as well, maybe into a "world" struct?
+  contact_pair Pairs[32];
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
   // NOTE(Jovan): The floor is just a giant squished cube
@@ -286,9 +310,8 @@ struct sdl_state
   sdl_camera Camera;
   uint32 CubeCount;
   uint32 SphereCount;
+  uint32 PairCount;
   uint32 GJKIteration;
-
-  real32 AccumI;
 };
 
 // NOTE(Jovan): Return value for ODEs and physics functions
@@ -297,28 +320,6 @@ struct phys_return
 {
   glm::vec3 X;
   glm::vec3 Y;
-};
-
-// NOTE(Jovan): Serves as info for a pair of 2 objects
-struct contact_pair
-{
-  // NOTE(Jovan): For identifying the type of collision
-  // so we know which types of objects to look at
-  collision_type Type;
-
-  // NOTE(Jovan): Impulse
-  real32 Lambda;
-  
-  // NOTE(Jovan): The intersection points
-  glm::vec3 PointA;
-  glm::vec3 PointB;
-
-  // NOTE(Jovan): Collision normal
-  glm::vec3 Normal;
-
-  // NOTE(Jovan): Indices of objects
-  int32 IndexA;
-  int32 IndexB;
 };
 
 #define SIM_UPDATE_AND_RENDER(name) void name(memory* Memory, sdl_input* Input, sdl_render* Render, real32 dt)

@@ -283,6 +283,55 @@ ClearTriangles(triangle* Triangle)
   Triangle->Count = 0;
 }
 
+// NOTE(Jovan): Checks whether or not a contact pair already
+// exists in the list
+internal bool32
+PairExists(sdl_state* State, contact_pair* Pair)
+{
+  bool32 Result = 0;
+
+  for(uint32 PairIndex = 0;
+      PairIndex < State->PairCount;
+      ++PairIndex)
+    {
+      if(State->Pairs[PairIndex].IndexA == Pair->IndexA &&
+	 State->Pairs[PairIndex].IndexB == Pair->IndexB)
+	{
+	  Result = 1;
+	  break;
+	}
+    }
+  
+  return Result;
+}
+
+// NOTE(Jovan): Pushes a contact pair into the list if it
+// doesn't exist already
+internal void
+PushPair(sdl_state* State, contact_pair Pair)
+{
+  if(PairExists(State, &Pair))
+    {
+      return;
+    }
+  State->Pairs[State->PairCount] = Pair;
+
+  State->PairCount++;
+}
+
+internal void
+RemovePair(sdl_state* State, int32 Index)
+{
+  for(uint32 PairIndex = Index;
+      PairIndex < State->PairCount - 1;
+      ++PairIndex)
+    {
+      State->Pairs[PairIndex] = State->Pairs[PairIndex + 1];
+    }
+
+  State->PairCount--;
+}
+
 internal void
 FloorUpdateVertices(sdl_state* State)
 {
@@ -1009,7 +1058,7 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
   // TODO(Jovan): Restitution bias
   // TODO(Jovan): Friction?
   int32 Iter = 32;
-  real32 Impulse = 0;
+  Pair->DeltaLambda = 0;
   while(Iter--)
     {
       // real32 Projection = glm::dot((V1 + glm::cross(W1, R1) - V2 - glm::cross(W2, R2)), N);
@@ -1023,21 +1072,23 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
       real32 Lambda = -(JdV + B) * JMJ;
 
       // NOTE(Jovan): Accumulating and clamping impulse
-      real32 OldAccumI = State->AccumI;
-      State->AccumI += Lambda;
-      if(State->AccumI < 0)
+      real32 OldAccumI = Pair->DeltaLambdaSum;
+      Pair->DeltaLambdaSum += Lambda;
+      if(Pair->DeltaLambdaSum < 0)
 	{
-	  State->AccumI = 0.0f;
+	  Pair->DeltaLambdaSum = 0.0f;
 	}
 
-      Impulse = State->AccumI - OldAccumI;
+      Pair->DeltaLambda = Pair->DeltaLambdaSum - OldAccumI;
 
     }
+  // TODO STUDY (Jovan): When using Pair Lambda instead of state
+  // there is a stronger push for some reason? 
   // NOTE(Jovan): Calculating linear impulse
-  glm::vec3 LinearImpulse = N * Impulse;
+  glm::vec3 LinearImpulse = N * Pair->DeltaLambda;
   // NOTE(Jovan): Calculating angular impulses
-  glm::vec3 AngularI1 = RN1 * Impulse;
-  glm::vec3 AngularI2 = RN2 * Impulse;
+  glm::vec3 AngularI1 = RN1 * Pair->DeltaLambda;
+  glm::vec3 AngularI2 = RN2 * Pair->DeltaLambda;
 
   // NOTE(Jovan): Applying linear and angular impulses
   switch(Pair->Type)
@@ -1112,9 +1163,6 @@ DrawCollisionDepth(sdl_state* State, contact_pair* Pair, sdl_render* Render, int
   SetUniformM4(Render->Shaders[2], "Projection", Render->Projection);
   if(Closest != -1)
     {
-      real32 PenDepth = glm::dot(((State->Cubes[Pair->IndexA].Position + Pair->PointA) -
-				  (State->Cubes[Pair->IndexB].Position + Pair->PointB)),
-				 Pair->Normal);
       glm::vec3 LineColor = glm::vec3(1.0, 0.0, 0.0);
       real32 Vertices[] =
 	{
@@ -1129,6 +1177,53 @@ DrawCollisionDepth(sdl_state* State, contact_pair* Pair, sdl_render* Render, int
       glBindVertexArray(Render->VAOs[3]);
       glDrawArrays(GL_LINE_STRIP, 0, 2);
     }
+}
+
+internal void
+DrawMinkowski(sdl_state* State, sdl_render* Render, contact_pair* Pair)
+{
+  if(Pair->Type != CC)
+    {
+      printf("ERROR::DRAWMINKOWSKI::Non CC contacts not supported\n");
+      return;
+    }
+  int32 IndexA = Pair->IndexA;
+  int32 IndexB = Pair->IndexB;
+  vertex v1 = CalculateSupport(State, Pair, glm::vec3(1.0, 1.0, 1.0));
+  vertex v2 = CalculateSupport(State, Pair, glm::vec3(-1.0, 1.0, 1.0));
+  vertex v3 = CalculateSupport(State, Pair, glm::vec3(1.0, -1.0, 1.0));
+  vertex v4 = CalculateSupport(State, Pair, glm::vec3(-1.0, -1.0, 1.0));
+  vertex v5 = CalculateSupport(State, Pair, glm::vec3(1.0, 1.0, -1.0));
+  vertex v6 = CalculateSupport(State, Pair, glm::vec3(-1.0, 1.0, -1.0));
+  vertex v7 = CalculateSupport(State, Pair, glm::vec3(1.0, -1.0, -1.0));
+  vertex v8 = CalculateSupport(State, Pair, glm::vec3(-1.0, -1.0, -1.0));
+  real32 MinkowskiVertices[] = {
+				v1.P.x, v1.P.y, v1.P.z,
+				v2.P.x, v2.P.y, v2.P.z,
+				
+				v1.P.x, v1.P.y, v1.P.z,
+				v3.P.x, v3.P.y, v3.P.z,
+
+				v3.P.x, v3.P.y, v3.P.z,
+				v4.P.x, v4.P.y, v4.P.z,
+				
+				v5.P.x, v5.P.y, v5.P.z,
+				v6.P.x, v6.P.y, v6.P.z,
+				
+				v5.P.x, v5.P.y, v5.P.z,
+				v7.P.x, v7.P.y, v7.P.z,
+				
+				v7.P.x, v7.P.y, v7.P.z,
+				v8.P.x, v8.P.y, v8.P.z,
+  };
+  glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(MinkowskiVertices), MinkowskiVertices, GL_DYNAMIC_DRAW);
+  glm::mat4 Model = glm::mat4(1.0);
+  SetUniformM4(Render->Shaders[2], "Model", Model);
+  glm::vec3 LineColor = glm::vec3(1.0f);
+  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
+  glBindVertexArray(Render->VAOs[3]);
+  glDrawArrays(GL_LINES, 0, 36);  
 }
 
 internal void
@@ -1152,7 +1247,7 @@ IntegrateVelocities(sdl_state* State, real32 dt)
 }
 
 internal void
-DetectCollisions(sdl_state* State, sdl_input* Input, real32 dt)
+DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 dt)
 {
   for(uint32 Cube1 = 0;
       Cube1 < State->CubeCount;
@@ -1187,13 +1282,28 @@ DetectCollisions(sdl_state* State, sdl_input* Input, real32 dt)
 	      Closest = ResolveCollision(State, &Pair, Input, &Pair.PointA);
 	      
 	      Pair.Normal = -State->Triangle->N[Closest];
-	      Constraint(State, &Pair, dt);
-      
+	      DrawCollisionDepth(State, &Pair, Render, Closest);
 	      ClearTriangles(State->Triangle);
 	      ClearEdges(State->Edge);
 	      ClearVertices(State->Simplex);
+	      PushPair(State, Pair);
+
+	      // TODO(Jovan): This works, but calling SolveConstraints from outside doesn't
+	      Constraint(State, &Pair, dt);
 	    }
 	}
+    }
+}
+
+internal void
+SolveConstraint(sdl_state* State, real32 dt)
+{
+  for(uint32 PairIndex = 0;
+      PairIndex < State->PairCount;
+      ++PairIndex)
+    {
+      contact_pair* CurrPair = &State->Pairs[PairIndex];
+      Constraint(State, CurrPair, dt);
     }
 }
 
@@ -1248,6 +1358,9 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Front = glm::vec3(0.0f, 0.0f, -1.0f);
       SimState->Camera.Right = glm::normalize(glm::cross(Up, SimState->Camera.Direction));
       SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
+
+      // NOTE(Jovan): Contact pairs init
+      SimState->PairCount = 0;
       
       // NOTE(Jovan): Cube init
       SimState->CubeCount = 2;
@@ -1291,18 +1404,18 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       // 	(2.0f * SimState->Cubes[2].Size * SimState->Cubes[2].Size);
 
       // NOTE(Jovan): Sphere init
-      SimState->SphereCount = 1;
-      SimState->Spheres[0].Model = glm::mat4(1.0f);
-      SimState->Spheres[0].Position = glm::vec3(3.0f, 4.0f, 2.0f);
-      SimState->Spheres[0].V = glm::vec3(0.0f);
-      SimState->Spheres[0].Forces = glm::vec3(0.0f);
-      SimState->Spheres[0].Angles = glm::vec3(0.0f);
-      SimState->Spheres[0].W = glm::vec3(0.0f);
-      SimState->Spheres[0].Torque = glm::vec3(0.0f);
-      SimState->Spheres[0].Radius = 1.0f;
-      SimState->Spheres[0].Mass = 10.0f;
-      SimState->Spheres[0].MOI = (2.0f / 5.0f) * SimState->Spheres[0].Mass *
-	pow(SimState->Spheres[0].Radius, 2);
+      SimState->SphereCount = 0;
+      // SimState->Spheres[0].Model = glm::mat4(1.0f);
+      // SimState->Spheres[0].Position = glm::vec3(3.0f, 4.0f, 2.0f);
+      // SimState->Spheres[0].V = glm::vec3(0.0f);
+      // SimState->Spheres[0].Forces = glm::vec3(0.0f);
+      // SimState->Spheres[0].Angles = glm::vec3(0.0f);
+      // SimState->Spheres[0].W = glm::vec3(0.0f);
+      // SimState->Spheres[0].Torque = glm::vec3(0.0f);
+      // SimState->Spheres[0].Radius = 1.0f;
+      // SimState->Spheres[0].Mass = 10.0f;
+      // SimState->Spheres[0].MOI = (2.0f / 5.0f) * SimState->Spheres[0].Mass *
+      // 	pow(SimState->Spheres[0].Radius, 2);
 
       // NOTE(Jovan): Floor init
       SimState->Floor.Model = glm::mat4(1.0);
@@ -1313,7 +1426,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Floor.Angles = glm::vec3(0.0);
       SimState->Floor.W = glm::vec3(0.0);
       SimState->Floor.Torque = glm::vec3(0.0);
-      SimState->Floor.Size = 1.0f;
+      SimState->Floor.Size = 100.0f;
       SimState->Floor.Mass = 1.0f;
       SimState->Floor.MOI = (SimState->Floor.Mass / 12.0f) *
       	(2.0f * SimState->Floor.Size * SimState->Floor.Size);
@@ -1347,16 +1460,14 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Physics stuff
   // --------------------------
-  IntegrateForces(SimState, dt);
-  // TODO IMPORTANT (Jovan): Generalize collision AND STABILIZE PLS
-  // TODO(Jovan): Form pairs?
-  DetectCollisions(SimState, Input, dt);
-  
-
   // CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   // CubeAddForce(SimState, 1, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   //CubeAddTorque(SimState,0, glm::vec3(1.0));
-  
+  IntegrateForces(SimState, dt);
+  // TODO IMPORTANT (Jovan): Generalize collision AND STABILIZE PLS
+  // TODO(Jovan): Form pairs?
+  DetectCollisions(SimState, Input, Render, dt);
+  //SolveConstraint(SimState, dt);
   // TODO(Jovan): Integrate velocities here?
   IntegrateVelocities(SimState, dt);
   // NOTE(Jovan): End physics stuff
@@ -1493,44 +1604,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // TODO(Jovan): Fix this
 #if DRAW_MINKOWSKI
-   SimState->IndexA = 0;
-   SimState->IndexB = 0;
-   SimState->CurrentCollisionType = CF;
-  vertex v1 = CalculateSupport(SimState, glm::vec3(1.0, 1.0, 1.0));
-  vertex v2 = CalculateSupport(SimState, glm::vec3(-1.0, 1.0, 1.0));
-  vertex v3 = CalculateSupport(SimState, glm::vec3(1.0, -1.0, 1.0));
-  vertex v4 = CalculateSupport(SimState, glm::vec3(-1.0, -1.0, 1.0));
-  vertex v5 = CalculateSupport(SimState, glm::vec3(1.0, 1.0, -1.0));
-  vertex v6 = CalculateSupport(SimState, glm::vec3(-1.0, 1.0, -1.0));
-  vertex v7 = CalculateSupport(SimState, glm::vec3(1.0, -1.0, -1.0));
-  vertex v8 = CalculateSupport(SimState, glm::vec3(-1.0, -1.0, -1.0));
-  real32 MinkowskiVertices[] = {
-				v1.P.x, v1.P.y, v1.P.z,
-				v2.P.x, v2.P.y, v2.P.z,
-				
-				v1.P.x, v1.P.y, v1.P.z,
-				v3.P.x, v3.P.y, v3.P.z,
-
-				v3.P.x, v3.P.y, v3.P.z,
-				v4.P.x, v4.P.y, v4.P.z,
-				
-				v5.P.x, v5.P.y, v5.P.z,
-				v6.P.x, v6.P.y, v6.P.z,
-				
-				v5.P.x, v5.P.y, v5.P.z,
-				v7.P.x, v7.P.y, v7.P.z,
-				
-				v7.P.x, v7.P.y, v7.P.z,
-				v8.P.x, v8.P.y, v8.P.z,
-  };
-  glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(MinkowskiVertices), MinkowskiVertices, GL_DYNAMIC_DRAW);
-  Model = glm::mat4(1.0);
-  SetUniformM4(Render->Shaders[2], "Model", Model);
-  LineColor = glm::vec3(1.0f);
-  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
-  glBindVertexArray(Render->VAOs[3]);
-  glDrawArrays(GL_LINES, 0, 36);  
+  DrawMinkowski(SimState, Render, &SimState->Pairs[0]);
 #endif
   
   // NOTE(Jovan): End Minkowski sum drawing
@@ -1608,6 +1682,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // --------------------
 #if LOGGING
   // TODO(Jovan): Make better logging
+  printf("Pair count: %d\n", SimState->PairCount);
   printf("Floor coords:");
   PrintVector(SimState->Floor.Position);
   //  printf("Collision: %d\n", CollisionHappened);
