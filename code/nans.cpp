@@ -370,54 +370,53 @@ GetFloorSupport(sdl_state* State, glm::vec3 Direction)
   return Result;
 }
 
+// TODO(Jovan): Maybe pass just indices?
 internal vertex
-CalculateSupport(sdl_state* State, glm::vec3 Direction)
+CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction)
 {
   vertex Result = {};
   glm::vec3 SupportA, SupportB;
-  switch(State->CurrentCollisionType)
+  switch(Pair->Type)
     {
     case CC:
       {
-	SupportA = GetCubeSupport(State, State->IndexA, Direction);
-	SupportB = GetCubeSupport(State, State->IndexB, -1.0f * Direction);
+	SupportA = GetCubeSupport(State, Pair->IndexA, Direction);
+	SupportB = GetCubeSupport(State, Pair->IndexB, -1.0f * Direction);
       }break;
     case CS:
       {
-	SupportA = GetCubeSupport(State, State->IndexA, Direction);
-	SupportB = GetSphereSupport(State, State->IndexB, Direction);
+	SupportA = GetCubeSupport(State, Pair->IndexA, Direction);
+	SupportB = GetSphereSupport(State, Pair->IndexB, Direction);
       }break;
     case SC:
       {
-	SupportA = GetSphereSupport(State, State->IndexA, Direction);	
-	SupportB = GetCubeSupport(State, State->IndexB, Direction);
+	SupportA = GetSphereSupport(State, Pair->IndexA, Direction);	
+	SupportB = GetCubeSupport(State, Pair->IndexB, Direction);
       }break;
     case CF:
       {
-	SupportA = GetCubeSupport(State, State->IndexA, Direction);
+	SupportA = GetCubeSupport(State, Pair->IndexA, Direction);
 	SupportB = GetFloorSupport(State, Direction);
-	State->Spheres[0].Position = SupportA;
-	State->Spheres[1].Position = SupportB;
       }break;
     case FC:
       {
 	SupportA = GetFloorSupport(State, Direction);
-	SupportB = GetCubeSupport(State, State->IndexB, Direction);
+	SupportB = GetCubeSupport(State, Pair->IndexB, Direction);
       }break;
     case SS:
       {
-	SupportA = GetSphereSupport(State, State->IndexA, Direction);
-	SupportB = GetSphereSupport(State, State->IndexB, Direction);
+	SupportA = GetSphereSupport(State, Pair->IndexA, Direction);
+	SupportB = GetSphereSupport(State, Pair->IndexB, Direction);
       }break;
     case SF:
       {
-	SupportA = GetSphereSupport(State, State->IndexA, Direction);
+	SupportA = GetSphereSupport(State, Pair->IndexA, Direction);
 	SupportB = GetFloorSupport(State, Direction);
       }break;
     case FS:
       {
 	SupportA = GetFloorSupport(State, Direction);
-	SupportB = GetSphereSupport(State, State->IndexB, Direction);
+	SupportB = GetSphereSupport(State, Pair->IndexB, Direction);
       }break;
     }
   Result.P = SupportA - SupportB;
@@ -428,11 +427,11 @@ CalculateSupport(sdl_state* State, glm::vec3 Direction)
 }
 
 internal bool32
-AddSupport(sdl_state* State, glm::vec3 Direction)
+AddSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction)
 {
   bool32 Result = 0;
   vertex NewVertex = {};
-  NewVertex = CalculateSupport(State, Direction);
+  NewVertex = CalculateSupport(State, Pair, Direction);
   
   if(glm::dot(Direction, NewVertex.P) >= 0)
     {
@@ -471,7 +470,7 @@ ClosestPointOnLine(glm::vec3 A, glm::vec3 B, glm::vec3 Target,
 }
 
 internal evolve_result
-EvolveSimplex(sdl_state* State, glm::vec3 PositionA, glm::vec3 PositionB)
+EvolveSimplex(sdl_state* State, contact_pair* Pair, glm::vec3 PositionA, glm::vec3 PositionB)
 {
   // IMPORTANT TODO(Jovan): REDO GJK
   evolve_result Result = NoIntersection;
@@ -596,7 +595,7 @@ EvolveSimplex(sdl_state* State, glm::vec3 PositionA, glm::vec3 PositionB)
       Result = NoIntersection;
       return Result;
     }
-  if(AddSupport(State, Direction))
+  if(AddSupport(State, Pair, Direction))
     {
       Result = StillEvolving;
     }
@@ -608,55 +607,63 @@ EvolveSimplex(sdl_state* State, glm::vec3 PositionA, glm::vec3 PositionB)
 }
 
 internal bool32
-DetectCollisions(sdl_state* State)
+CheckCollision(sdl_state* State, contact_pair* Pair)
 {
   bool32 Result = 0;
   evolve_result EvolutionResult = StillEvolving;
-  int32 AIndex = State->IndexA;
-  int32 BIndex = State->IndexB;
+  int32 IndexA = Pair->IndexA;
+  int32 IndexB = Pair->IndexB;
   while((EvolutionResult == StillEvolving) && (State->GJKIteration++ <= MAX_GJK_ITERATIONS))
     {
-      switch(State->CurrentCollisionType)
+      switch(Pair->Type)
 	{
 	case CC:
 	  {
-	    EvolutionResult = EvolveSimplex(State, State->Cubes[AIndex].Position,
-					    State->Cubes[BIndex].Position);
+	    EvolutionResult = EvolveSimplex(State, Pair,
+					    State->Cubes[IndexA].Position,
+					    State->Cubes[IndexB].Position);
 	  }break;
 	case CS:
 	  {
-	    EvolutionResult = EvolveSimplex(State, State->Cubes[AIndex].Position,
-					    State->Spheres[BIndex].Position);
+	    EvolutionResult = EvolveSimplex(State, Pair,
+					    State->Cubes[IndexA].Position,
+					    State->Spheres[IndexB].Position);
 	  }break;
 	case SC:
 	  {
-	    EvolutionResult = EvolveSimplex(State, State->Spheres[AIndex].Position,
-					    State->Cubes[BIndex].Position);
+	    EvolutionResult = EvolveSimplex(State, Pair,
+					    State->Spheres[IndexA].Position,
+					    State->Cubes[IndexB].Position);
 	  }break;
 	case CF:
 	  {
-	    EvolutionResult = EvolveSimplex(State, State->Cubes[AIndex].Position,
+	    EvolutionResult = EvolveSimplex(State, Pair,
+					    State->Cubes[IndexA].Position,
 					    State->Floor.Position);
 	  }break;
 	case FC:
 	  {
-	    EvolutionResult = EvolveSimplex(State, State->Floor.Position,
-					    State->Cubes[BIndex].Position);
+	    EvolutionResult = EvolveSimplex(State, Pair,
+					    State->Floor.Position,
+					    State->Cubes[IndexB].Position);
 	  }break;
 	case SS:
 	  {
-	    EvolutionResult = EvolveSimplex(State, State->Spheres[AIndex].Position,
-					    State->Spheres[BIndex].Position);
+	    EvolutionResult = EvolveSimplex(State, Pair,
+					    State->Spheres[IndexA].Position,
+					    State->Spheres[IndexB].Position);
 	  }break;
 	case SF:
 	  {
-	    EvolutionResult = EvolveSimplex(State, State->Spheres[AIndex].Position,
+	    EvolutionResult = EvolveSimplex(State, Pair,
+					    State->Spheres[IndexA].Position,
 					    State->Floor.Position);
 	  }break;
 	case FS:
 	  {
-	    EvolutionResult = EvolveSimplex(State, State->Floor.Position,
-					    State->Spheres[BIndex].Position);
+	    EvolutionResult = EvolveSimplex(State, Pair,
+					    State->Floor.Position,
+					    State->Spheres[IndexB].Position);
 	  }break;
 	}
     }
@@ -714,7 +721,7 @@ DrawTriangles(sdl_state* State, sdl_render* Render)
 }
 
 internal int32
-ResolveCollision(sdl_state* State, sdl_input* Input, contact_info* Info)
+ResolveCollision(sdl_state* State, contact_pair* Pair, sdl_input* Input, glm::vec3* Point)
 {
   int32 CurrIter = 0;
   simplex* Simplex = State->Simplex;
@@ -755,7 +762,7 @@ ResolveCollision(sdl_state* State, sdl_input* Input, contact_info* Info)
       //CurrentDistance = CurrentDistance == 0 ? 0.01 : CurrentDistance;
       
       glm::vec3 Direction = Triangle->N[ClosestIndex];
-      vertex NewSupport = CalculateSupport(State, Direction);
+      vertex NewSupport = CalculateSupport(State, Pair, Direction);
 
 
       // NOTE(Jovan): Calculate collision point and normal as linear combination
@@ -775,9 +782,11 @@ ResolveCollision(sdl_state* State, sdl_input* Input, contact_info* Info)
 	  real32 Depth = CurrentDistance;
 	  State->Depth = Depth;
 
-	  Info->Point = CollisionPoint;
-	  // TODO(Jovan): Probably not needed
-	  Info->Normal = CollisionNormal;
+	  // NOTE(Jovan): Return the collision Point
+	  *Point = CollisionPoint;
+
+	  // NOTE(Jovan): Return the closest index for indexing the collision normal
+	  // from the triangle list
 	  return ClosestIndex;
 	}
       // NOTE(Jovan): Removing triangle that can be "seen" by the new point
@@ -820,31 +829,38 @@ ResolveCollision(sdl_state* State, sdl_input* Input, contact_info* Info)
 }
 
 internal void
-IntegrateForces(sdl_state* State, uint32 CubeIndex, real32 dt)
+IntegrateForces(sdl_state* State, real32 dt)
 {
   phys_return Y0 = {};
   phys_return Y = {};
-  // NOTE(Jovan): Linear
-  Y0.X = State->Cubes[CubeIndex].Position;
-  Y0.Y = State->Cubes[CubeIndex].V;
-  Y = Euler(MovementFunction, dt, Y0, State->Cubes[CubeIndex].Forces, State->Cubes[CubeIndex].Mass);
-  State->Cubes[CubeIndex].V = Y.Y;
+  for(uint32 CubeIndex = 0;
+      CubeIndex < State->CubeCount;
+      ++CubeIndex)
+    {
+      // NOTE(Jovan): Linear
+      Y0.X = State->Cubes[CubeIndex].Position;
+      Y0.Y = State->Cubes[CubeIndex].V;
+      Y = Euler(MovementFunction, dt, Y0, State->Cubes[CubeIndex].Forces, State->Cubes[CubeIndex].Mass);
+      State->Cubes[CubeIndex].V = Y.Y;
 
-  // NOTE(Jovan): Rotational
-  Y0.X = State->Cubes[CubeIndex].Angles;
-  Y0.Y = State->Cubes[CubeIndex].W;
-  Y = Euler(RotationFunction, dt, Y0, State->Cubes[CubeIndex].Torque, State->Cubes[CubeIndex].MOI);
-  State->Cubes[CubeIndex].W = Y.Y;
+      // NOTE(Jovan): Rotational
+      Y0.X = State->Cubes[CubeIndex].Angles;
+      Y0.Y = State->Cubes[CubeIndex].W;
+      Y = Euler(RotationFunction, dt, Y0, State->Cubes[CubeIndex].Torque, State->Cubes[CubeIndex].MOI);
+      State->Cubes[CubeIndex].W = Y.Y;
   
-  // NOTE(Jovan): Update states and clear the forces/torques
-  UpdateVertices(State, CubeIndex);
-  CubeClearForces(State, CubeIndex);
+      // NOTE(Jovan): Update states and clear the forces/torques
+      UpdateVertices(State, CubeIndex);
+      CubeClearForces(State, CubeIndex);
+    }
+
+  // TODO(Jovan): Spheres
 }
 
 internal void
-Constraint(sdl_state* State, glm::vec3 N,
-	   contact_info* InfoA, contact_info* InfoB, real32 dt)
+Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 {
+  glm::vec3 N = Pair->Normal;
   if(N == glm::vec3(0.0))
     {
       return;
@@ -859,111 +875,111 @@ Constraint(sdl_state* State, glm::vec3 N,
   real32 InvI1, InvI2;
   // NOTE(Jovan): M^-1
   real32 InvM1, InvM2;
-  switch(State->CurrentCollisionType)
+  switch(Pair->Type)
     {
     case CC:
       {
-	PosA = State->Cubes[State->IndexA].Position;
-        PosB = State->Cubes[State->IndexB].Position;
-	InvI1 = 1.0f / State->Cubes[State->IndexA].MOI;
-	InvI2 = 1.0f / State->Cubes[State->IndexB].MOI;
-	InvM1 = 1.0f / State->Cubes[State->IndexA].Mass;
-	InvM2 = 1.0f /State->Cubes[State->IndexB].Mass;
-	V1 = State->Cubes[State->IndexA].V;
-	V2 = State->Cubes[State->IndexB].V;
-	W1 = State->Cubes[State->IndexA].W;
-	W2 = State->Cubes[State->IndexB].W;
+	PosA = State->Cubes[Pair->IndexA].Position;
+        PosB = State->Cubes[Pair->IndexB].Position;
+	InvI1 = 1.0f / State->Cubes[Pair->IndexA].MOI;
+	InvI2 = 1.0f / State->Cubes[Pair->IndexB].MOI;
+	InvM1 = 1.0f / State->Cubes[Pair->IndexA].Mass;
+	InvM2 = 1.0f /State->Cubes[Pair->IndexB].Mass;
+	V1 = State->Cubes[Pair->IndexA].V;
+	V2 = State->Cubes[Pair->IndexB].V;
+	W1 = State->Cubes[Pair->IndexA].W;
+	W2 = State->Cubes[Pair->IndexB].W;
       }break;
     case CS:
       {
-	PosA = State->Cubes[State->IndexA].Position;
-        PosB = State->Spheres[State->IndexB].Position;
-	InvI1 = 1.0f / State->Cubes[State->IndexA].MOI;
-	InvI2 = 1.0f / State->Spheres[State->IndexB].MOI;
-	InvM1 = 1.0f / State->Cubes[State->IndexA].Mass;
-	InvM2 = 1.0f / State->Spheres[State->IndexB].Mass;
-	V1 = State->Cubes[State->IndexA].V;
-	V2 = State->Spheres[State->IndexB].V;
-	W1 = State->Cubes[State->IndexA].W;
-	W2 = State->Spheres[State->IndexB].W;
+	PosA = State->Cubes[Pair->IndexA].Position;
+        PosB = State->Spheres[Pair->IndexB].Position;
+	InvI1 = 1.0f / State->Cubes[Pair->IndexA].MOI;
+	InvI2 = 1.0f / State->Spheres[Pair->IndexB].MOI;
+	InvM1 = 1.0f / State->Cubes[Pair->IndexA].Mass;
+	InvM2 = 1.0f / State->Spheres[Pair->IndexB].Mass;
+	V1 = State->Cubes[Pair->IndexA].V;
+	V2 = State->Spheres[Pair->IndexB].V;
+	W1 = State->Cubes[Pair->IndexA].W;
+	W2 = State->Spheres[Pair->IndexB].W;
       }break;
     case SC:
       {
-	PosA = State->Spheres[State->IndexA].Position;
-        PosB = State->Cubes[State->IndexB].Position;
-	InvI1 = 1.0f / State->Spheres[State->IndexA].MOI;
-	InvI2 = 1.0f / State->Cubes[State->IndexB].MOI;
-	InvM1 = 1.0f / State->Spheres[State->IndexA].Mass;
-	InvM2 = 1.0f / State->Cubes[State->IndexB].Mass;
-	V1 = State->Spheres[State->IndexA].V;
-	V2 = State->Cubes[State->IndexB].V;
-	W1 = State->Spheres[State->IndexA].W;
-	W2 = State->Cubes[State->IndexB].W;
+	PosA = State->Spheres[Pair->IndexA].Position;
+        PosB = State->Cubes[Pair->IndexB].Position;
+	InvI1 = 1.0f / State->Spheres[Pair->IndexA].MOI;
+	InvI2 = 1.0f / State->Cubes[Pair->IndexB].MOI;
+	InvM1 = 1.0f / State->Spheres[Pair->IndexA].Mass;
+	InvM2 = 1.0f / State->Cubes[Pair->IndexB].Mass;
+	V1 = State->Spheres[Pair->IndexA].V;
+	V2 = State->Cubes[Pair->IndexB].V;
+	W1 = State->Spheres[Pair->IndexA].W;
+	W2 = State->Cubes[Pair->IndexB].W;
       }break;
     case CF:
       {
-	PosA = State->Cubes[State->IndexA].Position;
+	PosA = State->Cubes[Pair->IndexA].Position;
 	PosB = State->Floor.Position;
-	InvI1 = 1.0f / State->Cubes[State->IndexA].MOI;
+	InvI1 = 1.0f / State->Cubes[Pair->IndexA].MOI;
 	InvI2 = 1.0f / State->Floor.MOI;
-	InvM1 = 1.0f / State->Cubes[State->IndexA].Mass;
+	InvM1 = 1.0f / State->Cubes[Pair->IndexA].Mass;
 	InvM2 = 1.0f / State->Floor.Mass;
-	V1 = State->Cubes[State->IndexA].V;
+	V1 = State->Cubes[Pair->IndexA].V;
 	V2 = State->Floor.V;
-	W1 = State->Cubes[State->IndexA].W;
+	W1 = State->Cubes[Pair->IndexA].W;
 	W2 = State->Floor.W;
       }break;
     case FC:
       {
 	PosA = State->Floor.Position;
-	PosB = State->Cubes[State->IndexB].Position;
+	PosB = State->Cubes[Pair->IndexB].Position;
 	InvI1 = 1.0f / State->Floor.MOI;
-	InvI2 = 1.0f / State->Cubes[State->IndexB].MOI;
+	InvI2 = 1.0f / State->Cubes[Pair->IndexB].MOI;
 	InvM1 = 1.0f / State->Floor.Mass;
-	InvM2 = 1.0f / State->Cubes[State->IndexB].Mass;
+	InvM2 = 1.0f / State->Cubes[Pair->IndexB].Mass;
 	V1 = State->Floor.V;
-	V2 = State->Cubes[State->IndexB].V;
+	V2 = State->Cubes[Pair->IndexB].V;
 	W1 = State->Floor.W;
-	W2 = State->Cubes[State->IndexB].W;
+	W2 = State->Cubes[Pair->IndexB].W;
       }break;
     case SS:
       {
-	PosA = State->Spheres[State->IndexA].Position;
-	PosB = State->Spheres[State->IndexB].Position;
-	InvI1 = 1.0f / State->Spheres[State->IndexA].MOI;
-	InvI2 = 1.0f / State->Spheres[State->IndexB].MOI;
-	InvM1 = 1.0f / State->Spheres[State->IndexA].Mass;
-	InvM2 = 1.0f / State->Spheres[State->IndexB].Mass;
-	V1 = State->Spheres[State->IndexA].V;
-	V2 = State->Spheres[State->IndexB].V;
-	W1 = State->Spheres[State->IndexA].W;
-	W2 = State->Spheres[State->IndexB].W;
+	PosA = State->Spheres[Pair->IndexA].Position;
+	PosB = State->Spheres[Pair->IndexB].Position;
+	InvI1 = 1.0f / State->Spheres[Pair->IndexA].MOI;
+	InvI2 = 1.0f / State->Spheres[Pair->IndexB].MOI;
+	InvM1 = 1.0f / State->Spheres[Pair->IndexA].Mass;
+	InvM2 = 1.0f / State->Spheres[Pair->IndexB].Mass;
+	V1 = State->Spheres[Pair->IndexA].V;
+	V2 = State->Spheres[Pair->IndexB].V;
+	W1 = State->Spheres[Pair->IndexA].W;
+	W2 = State->Spheres[Pair->IndexB].W;
       }break;
     case SF:
       {
-	PosA = State->Spheres[State->IndexA].Position;
+	PosA = State->Spheres[Pair->IndexA].Position;
 	PosB = State->Floor.Position;
-	InvI1 = 1.0f / State->Spheres[State->IndexA].MOI;
+	InvI1 = 1.0f / State->Spheres[Pair->IndexA].MOI;
 	InvI2 = 1.0f / State->Floor.MOI;
-	InvM1 = 1.0f / State->Spheres[State->IndexA].Mass;
+	InvM1 = 1.0f / State->Spheres[Pair->IndexA].Mass;
 	InvM2 = 1.0f / State->Floor.Mass;
-	V1 = State->Spheres[State->IndexA].V;
+	V1 = State->Spheres[Pair->IndexA].V;
 	V2 = State->Floor.V;
-	W1 = State->Spheres[State->IndexA].W;
+	W1 = State->Spheres[Pair->IndexA].W;
 	W2 = State->Floor.W;
       }break;
     case FS:
       {
 	PosA = State->Floor.Position;
-	PosB = State->Spheres[State->IndexB].Position;
+	PosB = State->Spheres[Pair->IndexB].Position;
 	InvI1 = 1.0f / State->Floor.MOI;
-	InvI2 = 1.0f / State->Spheres[State->IndexB].MOI;
+	InvI2 = 1.0f / State->Spheres[Pair->IndexB].MOI;
 	InvM1 = 1.0f / State->Floor.Mass;
-	InvM2 = 1.0f / State->Spheres[State->IndexB].Mass;
+	InvM2 = 1.0f / State->Spheres[Pair->IndexB].Mass;
 	V1 = State->Floor.V;
-	V2 = State->Spheres[State->IndexB].V;
+	V2 = State->Spheres[Pair->IndexB].V;
 	W1 = State->Floor.W;
-	W2 = State->Spheres[State->IndexB].W;
+	W2 = State->Spheres[Pair->IndexB].W;
       }break;
     default:
       {
@@ -971,8 +987,8 @@ Constraint(sdl_state* State, glm::vec3 N,
 	return;
       }break;
     }
-  R1 = InfoA->Point - PosA;
-  R2 = InfoB->Point - PosB;
+  R1 = Pair->PointA - PosA;
+  R2 = Pair->PointB - PosB;
   
   // NOTE(Jovan): Penetration depth
   real32 Depth = glm::dot(((PosA + R1) - (PosB + R2)), N);
@@ -1024,65 +1040,160 @@ Constraint(sdl_state* State, glm::vec3 N,
   glm::vec3 AngularI2 = RN2 * Impulse;
 
   // NOTE(Jovan): Applying linear and angular impulses
-  switch(State->CurrentCollisionType)
+  switch(Pair->Type)
     {
     case CC:
       {
-	State->Cubes[State->IndexA].V += InvM1 * LinearImpulse;
-	State->Cubes[State->IndexB].V -= InvM2 * LinearImpulse;
-	State->Cubes[State->IndexA].W += InvI1 * AngularI1;
-	State->Cubes[State->IndexB].W -= InvI2 * AngularI2;
+	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulse;
+	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
+	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1;
+	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
       }break;
     case CS:
       {
-	State->Cubes[State->IndexA].V += InvM1 * LinearImpulse;
-	State->Spheres[State->IndexB].V -= InvM2 * LinearImpulse;
-	State->Cubes[State->IndexA].W += InvI1 * AngularI1;
-	State->Spheres[State->IndexB].W -= InvI2 * AngularI2;
+	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulse;
+	State->Spheres[Pair->IndexB].V -= InvM2 * LinearImpulse;
+	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1;
+	State->Spheres[Pair->IndexB].W -= InvI2 * AngularI2;
       }break;
     case SC:
       {
-	State->Spheres[State->IndexA].V += InvM1 * LinearImpulse;
-	State->Cubes[State->IndexB].V -= InvM2 * LinearImpulse;
-	State->Spheres[State->IndexA].W += InvI1 * AngularI1;
-	State->Cubes[State->IndexB].W -= InvI2 * AngularI2;
+	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulse;
+	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
+	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1;
+	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
       }break;
     case CF:
       {
 	// NOTE(Jovan): Not updating floor velocities
-	State->Cubes[State->IndexA].V += InvM1 * LinearImpulse;
-	State->Cubes[State->IndexA].W += InvI1 * AngularI1;
+	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulse;
+	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1;
       }break;
     case FC:
       {
 	// NOTE(Jovan): Not updating floor velocities
-	State->Cubes[State->IndexB].V -= InvM2 * LinearImpulse;
-	State->Cubes[State->IndexB].W -= InvI2 * AngularI2;
+	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
+	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
       }break;
     case SS:
       {
-	State->Spheres[State->IndexA].V += InvM1 * LinearImpulse;
-	State->Spheres[State->IndexB].V -= InvM2 * LinearImpulse;
-	State->Spheres[State->IndexA].W += InvI1 * AngularI1;
-	State->Spheres[State->IndexB].W -= InvI2 * AngularI2;
+	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulse;
+	State->Spheres[Pair->IndexB].V -= InvM2 * LinearImpulse;
+	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1;
+	State->Spheres[Pair->IndexB].W -= InvI2 * AngularI2;
       }break;
     case SF:
       {
 	// NOTE(Jovan): Not updating floor velocities
-	State->Spheres[State->IndexA].V += InvM1 * LinearImpulse;
-	State->Spheres[State->IndexA].W += InvI1 * AngularI1;
+	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulse;
+	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1;
       }break;
     case FS:
       {
 	// NOTE(Jovan): Not updating floor velocities
-	State->Cubes[State->IndexB].V -= InvM2 * LinearImpulse;
-	State->Cubes[State->IndexB].W -= InvI2 * AngularI2;
+	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
+	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
       }break;
     default:
       {
 	printf("ERROR::CONSTRAINT::Unknown collision type\n");
 	return;
       }break;
+    }
+}
+
+internal void
+DrawCollisionDepth(sdl_state* State, contact_pair* Pair, sdl_render* Render, int32 Closest)
+{
+  // TODO(Jovan): Assuming cubes
+  // NOTE(Jovan): Collision depth drawing
+  glUseProgram(Render->Shaders[2]);
+  SetUniformM4(Render->Shaders[2], "View", Render->View);
+  SetUniformM4(Render->Shaders[2], "Projection", Render->Projection);
+  if(Closest != -1)
+    {
+      real32 PenDepth = glm::dot(((State->Cubes[Pair->IndexA].Position + Pair->PointA) -
+				  (State->Cubes[Pair->IndexB].Position + Pair->PointB)),
+				 Pair->Normal);
+      glm::vec3 LineColor = glm::vec3(1.0, 0.0, 0.0);
+      real32 Vertices[] =
+	{
+	 Pair->PointA.x, Pair->PointA.y, Pair->PointA.z,
+	 Pair->PointB.x, Pair->PointB.y, Pair->PointB.z 
+	};
+      glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
+      glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_DYNAMIC_DRAW);
+      glm::mat4 Model = glm::mat4(1.0);
+      SetUniformM4(Render->Shaders[2], "Model", Model);
+      SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
+      glBindVertexArray(Render->VAOs[3]);
+      glDrawArrays(GL_LINE_STRIP, 0, 2);
+    }
+}
+
+internal void
+IntegrateVelocities(sdl_state* State, real32 dt)
+{
+  for(uint32 CubeIndex = 0;
+      CubeIndex < State->CubeCount;
+      ++CubeIndex)
+    {
+      State->Cubes[CubeIndex].Position += dt * State->Cubes[CubeIndex].V;
+      State->Cubes[CubeIndex].Angles += dt * State->Cubes[CubeIndex].W;
+      UpdateVertices(State, CubeIndex);
+    }
+  for(uint32 SphereIndex = 0;
+      SphereIndex < State->SphereCount;
+      ++SphereIndex)
+    {
+      State->Spheres[SphereIndex].Position += dt * State->Spheres[SphereIndex].V;
+      State->Spheres[SphereIndex].Angles += dt * State->Spheres[SphereIndex].W;
+    }
+}
+
+internal void
+DetectCollisions(sdl_state* State, sdl_input* Input, real32 dt)
+{
+  for(uint32 Cube1 = 0;
+      Cube1 < State->CubeCount;
+      ++Cube1)
+    {
+      for(uint32 Cube2 = Cube1 + 1;
+	  Cube2 < State->CubeCount;
+	  ++Cube2)
+	{
+	  int32 Closest = -1;
+	  contact_pair Pair = {};
+	  Pair.Type = CC;
+	  Pair.IndexA = Cube2;
+	  Pair.IndexB = Cube1;
+	  bool32 CollisionHappened = 0;
+	  CollisionHappened = CheckCollision(State, &Pair);
+	  Closest = -1;
+	  if(CollisionHappened)
+	    {
+	      // NOTE(Jovan): For B to A
+	      Closest = ResolveCollision(State, &Pair, Input, &Pair.PointB);
+
+	      // NOTE(Jovan): Clear B to A collision info so GJK can start over
+	      // for A to B
+	      ClearTriangles(State->Triangle);
+	      ClearEdges(State->Edge);
+	      ClearVertices(State->Simplex);
+
+	      Pair.IndexA = Cube1;
+	      Pair.IndexB = Cube2;
+	      CheckCollision(State, &Pair);
+	      Closest = ResolveCollision(State, &Pair, Input, &Pair.PointA);
+	      
+	      Pair.Normal = -State->Triangle->N[Closest];
+	      Constraint(State, &Pair, dt);
+      
+	      ClearTriangles(State->Triangle);
+	      ClearEdges(State->Edge);
+	      ClearVertices(State->Simplex);
+	    }
+	}
     }
 }
 
@@ -1139,7 +1250,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
       
       // NOTE(Jovan): Cube init
-      SimState->CubeCount = 3;
+      SimState->CubeCount = 2;
       SimState->Cubes[0].Model = glm::mat4(1.0);
       UpdateVertices(SimState, 0);
       SimState->Cubes[0].Position = glm::vec3(2.0, 4.5f, 2.1);//(2.1, 2.5 ,2.1);
@@ -1164,23 +1275,23 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Cubes[1].Size = 1.0f;
       SimState->Cubes[1].Mass = 10.0f;
       SimState->Cubes[1].MOI = (SimState->Cubes[1].Mass / 12.0f) *
-	(2.0f * SimState->Cubes[1].Size * SimState->Cubes[1].Size);
+      	(2.0f * SimState->Cubes[1].Size * SimState->Cubes[1].Size);
       
-      SimState->Cubes[2].Model = glm::mat4(1.0);
-      UpdateVertices(SimState, 1);
-      SimState->Cubes[2].Position = glm::vec3(2.0, 1.5, 2.0);
-      SimState->Cubes[2].V = glm::vec3(0.0);
-      SimState->Cubes[2].Forces = glm::vec3(0.0);
-      SimState->Cubes[2].Angles = glm::vec3(0.0);
-      SimState->Cubes[2].W = glm::vec3(0.0);
-      SimState->Cubes[2].Torque = glm::vec3(0.0);
-      SimState->Cubes[2].Size = 1.0f;
-      SimState->Cubes[2].Mass = 10.0f;
-      SimState->Cubes[2].MOI = (SimState->Cubes[2].Mass / 12.0f) *
-	(2.0f * SimState->Cubes[2].Size * SimState->Cubes[2].Size);
+      // SimState->Cubes[2].Model = glm::mat4(1.0);
+      // UpdateVertices(SimState, 1);
+      // SimState->Cubes[2].Position = glm::vec3(2.0, 1.5, 2.0);
+      // SimState->Cubes[2].V = glm::vec3(0.0);
+      // SimState->Cubes[2].Forces = glm::vec3(0.0);
+      // SimState->Cubes[2].Angles = glm::vec3(0.0);
+      // SimState->Cubes[2].W = glm::vec3(0.0);
+      // SimState->Cubes[2].Torque = glm::vec3(0.0);
+      // SimState->Cubes[2].Size = 1.0f;
+      // SimState->Cubes[2].Mass = 10.0f;
+      // SimState->Cubes[2].MOI = (SimState->Cubes[2].Mass / 12.0f) *
+      // 	(2.0f * SimState->Cubes[2].Size * SimState->Cubes[2].Size);
 
       // NOTE(Jovan): Sphere init
-      SimState->SphereCount = 2;
+      SimState->SphereCount = 1;
       SimState->Spheres[0].Model = glm::mat4(1.0f);
       SimState->Spheres[0].Position = glm::vec3(3.0f, 4.0f, 2.0f);
       SimState->Spheres[0].V = glm::vec3(0.0f);
@@ -1188,24 +1299,10 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Spheres[0].Angles = glm::vec3(0.0f);
       SimState->Spheres[0].W = glm::vec3(0.0f);
       SimState->Spheres[0].Torque = glm::vec3(0.0f);
-  
-      SimState->Spheres[0].Radius = 0.025f;
+      SimState->Spheres[0].Radius = 1.0f;
       SimState->Spheres[0].Mass = 10.0f;
       SimState->Spheres[0].MOI = (2.0f / 5.0f) * SimState->Spheres[0].Mass *
 	pow(SimState->Spheres[0].Radius, 2);
-      
-      SimState->Spheres[1].Model = glm::mat4(1.0f);
-      SimState->Spheres[1].Position = glm::vec3(3.0f, 4.0f, 2.0f);
-      SimState->Spheres[1].V = glm::vec3(0.0f);
-      SimState->Spheres[1].Forces = glm::vec3(0.0f);
-      SimState->Spheres[1].Angles = glm::vec3(0.0f);
-      SimState->Spheres[1].W = glm::vec3(0.0f);
-      SimState->Spheres[1].Torque = glm::vec3(0.0f);
-  
-      SimState->Spheres[1].Radius = 0.025f;
-      SimState->Spheres[1].Mass = 10.0f;
-      SimState->Spheres[1].MOI = (2.0f / 5.0f) * SimState->Spheres[1].Mass *
-	pow(SimState->Spheres[1].Radius, 2);
 
       // NOTE(Jovan): Floor init
       SimState->Floor.Model = glm::mat4(1.0);
@@ -1228,14 +1325,14 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Coordinate systems
   // -------------------------------
-  glm::mat4 Projection = glm::perspective(glm::radians(45.0f),
+  Render->Projection = glm::perspective(glm::radians(45.0f),
 					  (real32)DEFAULT_WINDOW_WIDTH / (real32)DEFAULT_WINDOW_HEIGHT,
 					  0.1f,
 					  100.0f);
   glm::mat4 Model = glm::mat4(1.0f);
-  glm::mat4 View = glm::mat4(1.0f);
-  View = glm::translate(View, glm::vec3(0.0f, 0.0f, -3.0f));
-  View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
+  Render->View = glm::mat4(1.0f);
+  Render->View = glm::translate(Render->View, glm::vec3(0.0f, 0.0f, -3.0f));
+  Render->View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
 		     SimState->Camera.Up);
 
   // NOTE(Jovan): End coordinate systems
@@ -1250,108 +1347,18 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Physics stuff
   // --------------------------
-  int32 Closest = -1;
-  contact_info A = {};
-  contact_info B = {};
-  glm::vec3 Normal;
-  bool32 CollisionHappened = 0;
+  IntegrateForces(SimState, dt);
   // TODO IMPORTANT (Jovan): Generalize collision AND STABILIZE PLS
-  for(uint32 CubeIndex1 = 0;
-      CubeIndex1 < SimState->CubeCount;
-      ++CubeIndex1)
-    {
-      IntegrateForces(SimState, CubeIndex1, dt);
-      for(uint32 CubeIndex2 = CubeIndex1;
-	  CubeIndex2 < SimState->CubeCount;
-	  ++CubeIndex2)
-	{
-	  if(CubeIndex1 == CubeIndex2)
-	    {
-	      continue;
-	    }
-	  SimState->IndexA = CubeIndex2;
-	  SimState->IndexB = CubeIndex1;
-	  SimState->CurrentCollisionType = CC;
-	  CollisionHappened = DetectCollisions(SimState);
-	  Closest = -1;
-	  A = {};
-	  B = {};
-	  IntegrateForces(SimState, CubeIndex2, dt);
-	  if(CollisionHappened)
-	    {
-	      // NOTE(Jovan): For B to A
-	      Closest = ResolveCollision(SimState, Input, &B);
+  // TODO(Jovan): Form pairs?
+  DetectCollisions(SimState, Input, dt);
+  
 
-	      // NOTE(Jovan): Clear B to A collision info so GJK can start over
-	      // for A to B
-	      ClearTriangles(SimState->Triangle);
-	      ClearEdges(SimState->Edge);
-	      ClearVertices(SimState->Simplex);
-
-	      // NOTE(Jovan): For A to B
-	      SimState->IndexA = CubeIndex1;
-	      SimState->IndexB = CubeIndex2;
-	      DetectCollisions(SimState);
-	      Closest = ResolveCollision(SimState, Input, &A);
-	      ClearTriangles(SimState->Triangle);
-	      ClearEdges(SimState->Edge);
-	      ClearVertices(SimState->Simplex);
-	      
-	      Normal = -SimState->Triangle->N[Closest];
-	      Constraint(SimState, Normal, &A, &B, dt);
-	      
-	    }
-	}
-    }
-#if 0
-  ClearTriangles(SimState->Triangle);
-  ClearEdges(SimState->Edge);
-  ClearVertices(SimState->Simplex);
-  // NOTE(Jovan): Floor collisions
-  FloorUpdateVertices(SimState);
-  SimState->IndexA = 0;
-  SimState->IndexB = 0;
-  SimState->CurrentCollisionType = FC;
-  A = {};
-  B = {};
-  Normal = glm::vec3(0.0);
-  bool32 CollisionFloor = DetectCollisions(SimState);
-  if(CollisionFloor)
-    {
-      printf("FLOOR COLLISION!\n");
-      ResolveCollision(SimState, Input, &B);
-      ClearTriangles(SimState->Triangle);
-      ClearEdges(SimState->Edge);
-      ClearVertices(SimState->Simplex);
-
-      SimState->IndexA = 0;
-      SimState->IndexB = 0;
-      SimState->CurrentCollisionType = CF;
-      DetectCollisions(SimState);
-      Closest = ResolveCollision(SimState, Input, &A);
-      ClearTriangles(SimState->Triangle);
-      ClearEdges(SimState->Edge);
-      ClearVertices(SimState->Simplex);
-      
-      Normal = -SimState->Triangle->N[Closest];
-      printf("Happening!\n");
-      Constraint(SimState, Normal, &A, &B, dt);
-      
-    }
-#endif
   // CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   // CubeAddForce(SimState, 1, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   //CubeAddTorque(SimState,0, glm::vec3(1.0));
   
   // TODO(Jovan): Integrate velocities here?
-  for(uint32 CubeIndex = 0;
-      CubeIndex < SimState->CubeCount;
-      ++CubeIndex)
-    {
-      SimState->Cubes[CubeIndex].Position += dt * SimState->Cubes[CubeIndex].V;
-      SimState->Cubes[CubeIndex].Angles += dt * SimState->Cubes[CubeIndex].W;
-      UpdateVertices(SimState, CubeIndex);
-    }
+  IntegrateVelocities(SimState, dt);
   // NOTE(Jovan): End physics stuff
   // ------------------------------
   
@@ -1361,7 +1368,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   Front.y = sin(glm::radians(SimState->Camera.Pitch));
   Front.z = sin(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
   SimState->Camera.Front = glm::normalize(Front);
-  View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
+  Render->View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
 		     SimState->Camera.Up);
 
 #if DRAW_WIRE
@@ -1369,40 +1376,19 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 #else
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 #endif
-  // NOTE(Jovan): Collision depth drawing
-  glUseProgram(Render->Shaders[2]);
-  SetUniformM4(Render->Shaders[2], "View", View);
-  SetUniformM4(Render->Shaders[2], "Projection", Projection);
-  if(Closest != -1)
-    {
-      real32 PenDepth = glm::dot(((SimState->Cubes[0].Position + A.Point) -
-				    (SimState->Cubes[1].Position + B.Point)),
-				   Normal);
-      glm::vec3 LineColor = glm::vec3(1.0, 0.0, 0.0);
-      real32 Vertices[] =
-	{
-	 A.Point.x, A.Point.y, A.Point.z,
-	 B.Point.x, B.Point.y, B.Point.z 
-	};
-      glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
-      glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_DYNAMIC_DRAW);
-      Model = glm::mat4(1.0);
-      SetUniformM4(Render->Shaders[2], "Model", Model);
-      SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
-      glBindVertexArray(Render->VAOs[3]);
-      glDrawArrays(GL_LINE_STRIP, 0, 2);
-    }
   
   // NOTE(Jovan): Coordinate drawing
   // -------------------------------
   glUseProgram(Render->Shaders[2]);
-  SetUniformM4(Render->Shaders[2], "View", View);
-  SetUniformM4(Render->Shaders[2], "Projection", Projection);
+  SetUniformM4(Render->Shaders[2], "View", Render->View);
+  SetUniformM4(Render->Shaders[2], "Projection", Render->Projection);
   real32 LineLength = 100.0f;
   glm::vec3 LineColor = glm::vec3(0.0);
 
   // NOTE(Jovan): Drawing polytope
   // ----------------
+
+  // TODO(Jovan): Fix 
 #if DRAW_EPA
   DrawTriangles(SimState, Render);
 
@@ -1479,8 +1465,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   glUseProgram(Render->Shaders[0]);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, Render->Textures[2]);
-  SetUniformM4(Render->Shaders[0], "View", View);
-  SetUniformM4(Render->Shaders[0], "Projection", Projection);
+  SetUniformM4(Render->Shaders[0], "View", Render->View);
+  SetUniformM4(Render->Shaders[0], "Projection", Render->Projection);
   SimState->Floor.Model = glm::mat4(1.0);
   SimState->Floor.Model = glm::translate(SimState->Floor.Model, SimState->Floor.Position);
   SimState->Floor.Model = glm::rotate(SimState->Floor.Model, glm::radians(SimState->Floor.Angles.x),
@@ -1498,13 +1484,14 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 			 
   // NOTE(Jovan): End floor drawing
   // ------------------------------
-  SetUniformM4(Render->Shaders[0], "View", View);
-  SetUniformM4(Render->Shaders[0], "Projection", Projection);
+  SetUniformM4(Render->Shaders[0], "View", Render->View);
+  SetUniformM4(Render->Shaders[0], "Projection", Render->Projection);
 #endif 
 
   // NOTE(Jovan): Minkowski sum drawing
   // ---------------------------------
 
+  // TODO(Jovan): Fix this
 #if DRAW_MINKOWSKI
    SimState->IndexA = 0;
    SimState->IndexB = 0;
@@ -1555,8 +1542,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, Render->Textures[0]);
 
-  SetUniformM4(Render->Shaders[0], "View", View);
-  SetUniformM4(Render->Shaders[0], "Projection", Projection);
+  SetUniformM4(Render->Shaders[0], "View", Render->View);
+  SetUniformM4(Render->Shaders[0], "Projection", Render->Projection);
 #if DRAW_CUBES
   for(uint32 CubeIndex = 0;
       CubeIndex < SimState->CubeCount;
@@ -1590,8 +1577,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   glUseProgram(Render->Shaders[1]);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, Render->Textures[1]);
-  SetUniformM4(Render->Shaders[1], "View", View);
-  SetUniformM4(Render->Shaders[1], "Projection", Projection);
+  SetUniformM4(Render->Shaders[1], "View", Render->View);
+  SetUniformM4(Render->Shaders[1], "Projection", Render->Projection);
   for(uint32 SphereIndex = 0;
       SphereIndex < SimState->SphereCount;
       ++SphereIndex)
@@ -1623,7 +1610,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // TODO(Jovan): Make better logging
   printf("Floor coords:");
   PrintVector(SimState->Floor.Position);
-  printf("Collision: %d\n", CollisionHappened);
+  //  printf("Collision: %d\n", CollisionHappened);
   printf("Triangles: %d\n", SimState->Triangle->Count);
   printf("Normals:\n");
   PrintVector(SimState->Triangle->N[0]);

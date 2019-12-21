@@ -148,6 +148,9 @@ struct sdl_render
   uint32 EBOs[1];
   uint32* Indices;
   uint32 Num;
+
+  glm::mat4 View;
+  glm::mat4 Projection;
 };
 
 struct memory
@@ -266,11 +269,6 @@ struct sdl_state
 {
   // TODO(jovan): TEMP
   real32 Depth;
-
-  // TODO(jovan): Keep like this?
-  int32 IndexA;
-  int32 IndexB;
-  collision_type CurrentCollisionType;
   
   // NOTE(Jovan): Vertices for the simplex
   memory_arena SimplexArena;
@@ -301,11 +299,26 @@ struct phys_return
   glm::vec3 Y;
 };
 
-struct contact_info
+// NOTE(Jovan): Serves as info for a pair of 2 objects
+struct contact_pair
 {
-  glm::vec3 Point;
-  // TODO(Jovan): Probably not needed
+  // NOTE(Jovan): For identifying the type of collision
+  // so we know which types of objects to look at
+  collision_type Type;
+
+  // NOTE(Jovan): Impulse
+  real32 Lambda;
+  
+  // NOTE(Jovan): The intersection points
+  glm::vec3 PointA;
+  glm::vec3 PointB;
+
+  // NOTE(Jovan): Collision normal
   glm::vec3 Normal;
+
+  // NOTE(Jovan): Indices of objects
+  int32 IndexA;
+  int32 IndexB;
 };
 
 #define SIM_UPDATE_AND_RENDER(name) void name(memory* Memory, sdl_input* Input, sdl_render* Render, real32 dt)
