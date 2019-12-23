@@ -60,7 +60,7 @@ typedef double real64;
 #define Assert(Expression)
 #endif
 
-#define PrintVector(Vector) printf("%f %f %f\n", Vector.x, Vector.y, Vector.z)
+//#define PrintVector(Vector) printf("%f %f %f\n", Vector.x, Vector.y, Vector.z)
 
 
   enum collision_type
@@ -191,18 +191,22 @@ struct simplex
 struct edge
 {
   uint32 Count;
-  vertex* A;
-  vertex* B;
-
+  /* vertex* A; */
+  /* vertex* B; */
+  vertex A;
+  vertex B;
 };
 
 struct triangle
 {
   uint32 Count;
-  vertex* A;
-  vertex* B;
-  vertex* C;
-  glm::vec3* N;
+  /* vertex* A; */
+  /* vertex* B; */
+  /* vertex* C; */
+  vertex A;
+  vertex B;
+  vertex C;
+  glm::vec3 N;//glm::vec3* N;
 };
 
 struct sdl_camera
@@ -293,12 +297,12 @@ struct sdl_state
   real32 Depth;
   
   // NOTE(Jovan): Vertices for the simplex
-  memory_arena SimplexArena;
-  memory_arena EdgeArena;
-  memory_arena TriangleArena;
-  simplex* Simplex;
-  edge *Edge;
-  triangle *Triangle;
+  /* memory_arena SimplexArena; */
+  /* memory_arena EdgeArena; */
+  /* memory_arena TriangleArena; */
+  /* simplex* Simplex; */
+  /* edge *Edge; */
+  /* triangle *Triangle; */
 
   // TODO(jovan): Memory arenas as well, maybe into a "world" struct?
   contact_pair Pairs[32];
