@@ -314,17 +314,17 @@ PairExists(sdl_state* State, contact_pair* Pair)
 {
   bool32 Result = 0;
 
-  for(uint32 PairIndex = 0;
-      PairIndex < State->PairCount;
-      ++PairIndex)
-    {
-      if(State->Pairs[PairIndex].IndexA == Pair->IndexA &&
-	 State->Pairs[PairIndex].IndexB == Pair->IndexB)
-	{
-	  Result = 1;
-	  break;
-	}
-    }
+  // for(uint32 PairIndex = 0;
+  //     PairIndex < State->PairCount;
+  //     ++PairIndex)
+  //   {
+  //     if(State->Pairs[PairIndex].IndexA == Pair->IndexA &&
+  // 	 State->Pairs[PairIndex].IndexB == Pair->IndexB)
+  // 	{
+  // 	  Result = 1;
+  // 	  break;
+  // 	}
+  //   }
   
   return Result;
 }
@@ -334,26 +334,26 @@ PairExists(sdl_state* State, contact_pair* Pair)
 internal void
 PushPair(sdl_state* State, contact_pair Pair)
 {
-  if(PairExists(State, &Pair))
-    {
-      return;
-    }
-  State->Pairs[State->PairCount] = Pair;
+  // if(PairExists(State, &Pair))
+  //   {
+  //     return;
+  //   }
+  // State->Pairs[State->PairCount] = Pair;
 
-  State->PairCount++;
+  // State->PairCount++;
 }
 
 internal void
 RemovePair(sdl_state* State, int32 Index)
 {
-  for(uint32 PairIndex = Index;
-      PairIndex < State->PairCount - 1;
-      ++PairIndex)
-    {
-      State->Pairs[PairIndex] = State->Pairs[PairIndex + 1];
-    }
+  // for(uint32 PairIndex = Index;
+  //     PairIndex < State->PairCount - 1;
+  //     ++PairIndex)
+  //   {
+  //     State->Pairs[PairIndex] = State->Pairs[PairIndex + 1];
+  //   }
 
-  State->PairCount--;
+  // State->PairCount--;
 }
 
 internal void
@@ -611,7 +611,7 @@ EvolveSimplex(sdl_state* State, contact_pair* Pair, glm::vec3 PositionA, glm::ve
 	Direction = glm::cross(AC, AB);
 
 	// NOTE(Jovan): Ensure that Direction points to the origin
-	glm::vec3 A0 = Simplex[0].P;//-1.0f * Simplex->Vertices[0].P;
+	glm::vec3 A0 = -1.0f * Simplex[0].P;//-1.0f * Simplex->Vertices[0].P;
 	if(glm::dot(Direction, A0) < 0)
 	  {
 	    Direction *= -1.0f;
@@ -686,7 +686,6 @@ CheckCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simple
   evolve_result EvolutionResult = StillEvolving;
   int32 IndexA = Pair->IndexA;
   int32 IndexB = Pair->IndexB;
-  //  std::vector<vertex> Simplex;
   Simplex.clear();
   while((EvolutionResult == StillEvolving) && (State->GJKIteration++ <= MAX_GJK_ITERATIONS))
     {
@@ -805,8 +804,6 @@ ResolveCollision(sdl_state* State, contact_pair* Pair, sdl_input* Input, glm::ve
   //triangle* Triangle = State->Triangle;
   std::vector<edge> Edge;
   std::vector<triangle> Triangle;
-  Edge.clear();
-  Triangle.clear();
   // NOTE(Jovan): Take over points from GJK and construct a tetrahedron
   vertex A = Simplex[0];//Simplex->Vertices[0];
   vertex B = Simplex[1];//Simplex->Vertices[1];
@@ -1203,15 +1200,13 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 }
 
 internal void
-DrawCollisionDepth(sdl_state* State, contact_pair* Pair, sdl_render* Render, int32 Closest)
+DrawCollisionDepth(sdl_state* State, contact_pair* Pair, sdl_render* Render)
 {
   // TODO(Jovan): Assuming cubes
   // NOTE(Jovan): Collision depth drawing
   glUseProgram(Render->Shaders[2]);
   SetUniformM4(Render->Shaders[2], "View", Render->View);
   SetUniformM4(Render->Shaders[2], "Projection", Render->Projection);
-  if(Closest != -1)
-    {
       glm::vec3 LineColor = glm::vec3(1.0, 0.0, 0.0);
       real32 Vertices[] =
 	{
@@ -1225,7 +1220,6 @@ DrawCollisionDepth(sdl_state* State, contact_pair* Pair, sdl_render* Render, int
       SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
       glBindVertexArray(Render->VAOs[3]);
       glDrawArrays(GL_LINE_STRIP, 0, 2);
-    }
 }
 
 internal void
@@ -1298,7 +1292,8 @@ IntegrateVelocities(sdl_state* State, real32 dt)
 }
 
 internal void
-DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 dt)
+DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 dt,
+		 std::vector<contact_pair>& Pairs)
 {
   for(uint32 Cube1 = 0;
       Cube1 < State->CubeCount;
@@ -1315,7 +1310,6 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
 	  Pair.IndexB = Cube1;
 	  bool32 CollisionHappened = 0;
 	  std::vector<vertex> Simplex;
-	  Simplex.clear();
 	  CollisionHappened = CheckCollision(State, &Pair, Simplex);
 	  Closest = -1;
 	  if(CollisionHappened)
@@ -1336,30 +1330,49 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
 	      // TODO(Jovan): Make it a chain call for Resolve?
 	      // Closest
 	      Pair.Normal = ResolveCollision(State, &Pair, Input, &Pair.PointA, Simplex);
-	      
 	      //Pair.Normal = -State->Triangle->N[Closest];
-	      DrawCollisionDepth(State, &Pair, Render, Closest);
+	      DrawCollisionDepth(State, &Pair, Render);
 	      // ClearTriangles(State->Triangle);
 	      // ClearEdges(State->Edge);
 	      // ClearVertices(State->Simplex);
-	      PushPair(State, Pair);
-
+	      //PushPair(State, Pair);
+	      bool32 Exists = 0;
+	      for(std::vector<contact_pair>::iterator it = Pairs.begin();
+		  it != Pairs.end();
+		  ++it)
+		{
+		  if((it->IndexA == Pair.IndexA && it->IndexB == Pair.IndexB) ||
+		     (it->IndexA == Pair.IndexB && it->IndexB == Pair.IndexA))
+		    {
+		      Exists = 1;
+		    }
+		}
+	      if(Exists == 0)
+		{
+		  Pairs.push_back(Pair);
+		}
 	      // TODO(Jovan): This works, but calling SolveConstraints from outside doesn't
-	      Constraint(State, &Pair, dt);
 	    }
     	}
     }
 }
 
 internal void
-SolveConstraint(sdl_state* State, real32 dt)
+SolveConstraints(sdl_state* State, real32 dt, std::vector<contact_pair>& Pairs)
 {
-  for(uint32 PairIndex = 0;
-      PairIndex < State->PairCount;
-      ++PairIndex)
+  // for(uint32 PairIndex = 0;
+  //     PairIndex < State->PairCount;
+  //     ++PairIndex)
+  //   {
+  //     contact_pair* CurrPair = &State->Pairs[PairIndex];
+  //     Constraint(State, CurrPair, dt);
+  //   }
+  for(std::vector<contact_pair>::iterator it = Pairs.begin();
+      it != Pairs.end();
+      ++it)
     {
-      contact_pair* CurrPair = &State->Pairs[PairIndex];
-      Constraint(State, CurrPair, dt);
+      contact_pair Tmp = *it;
+      Constraint(State, &Tmp, dt);
     }
 }
 
@@ -1375,7 +1388,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       srand(time(0));
 
       // NOTE(Jovan): GJK init stuff
-      #if 0 
+#if 0 
       InitializeArena(&SimState->SimplexArena, Memory->PermanentStorageSize - sizeof(sdl_state),
 		      (uint8*)Memory->PermanentStorage + sizeof(sdl_state));
       SimState->Simplex = PushStruct(&SimState->SimplexArena, simplex);
@@ -1401,7 +1414,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       Triangle->B = PushArray(&SimState->TriangleArena, 128, vertex);
       Triangle->C = PushArray(&SimState->TriangleArena, 128, vertex);
       Triangle->N = PushArray(&SimState->TriangleArena, 128, glm::vec3);
-      #endif
+#endif
       // NOTE(Jovan): Camera init
       SimState->Camera.FOV = 45.0f; 
       SimState->Camera.Pitch = 0.0f;
@@ -1417,7 +1430,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
 
       // NOTE(Jovan): Contact pairs init
-      SimState->PairCount = 0;
+      //SimState->PairCount = 0;
       
       // NOTE(Jovan): Cube init
       SimState->CubeCount = 3;
@@ -1448,7 +1461,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       	(2.0f * SimState->Cubes[1].Size * SimState->Cubes[1].Size);
       
       SimState->Cubes[2].Model = glm::mat4(1.0);
-      UpdateVertices(SimState, 1);
+      UpdateVertices(SimState, 2);
       SimState->Cubes[2].Position = glm::vec3(2.0, 1.5, 2.0);
       SimState->Cubes[2].V = glm::vec3(0.0);
       SimState->Cubes[2].Forces = glm::vec3(0.0);
@@ -1461,18 +1474,30 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       	(2.0f * SimState->Cubes[2].Size * SimState->Cubes[2].Size);
 
       // NOTE(Jovan): Sphere init
-      SimState->SphereCount = 0;
-      // SimState->Spheres[0].Model = glm::mat4(1.0f);
-      // SimState->Spheres[0].Position = glm::vec3(3.0f, 4.0f, 2.0f);
-      // SimState->Spheres[0].V = glm::vec3(0.0f);
-      // SimState->Spheres[0].Forces = glm::vec3(0.0f);
-      // SimState->Spheres[0].Angles = glm::vec3(0.0f);
-      // SimState->Spheres[0].W = glm::vec3(0.0f);
-      // SimState->Spheres[0].Torque = glm::vec3(0.0f);
-      // SimState->Spheres[0].Radius = 1.0f;
-      // SimState->Spheres[0].Mass = 10.0f;
-      // SimState->Spheres[0].MOI = (2.0f / 5.0f) * SimState->Spheres[0].Mass *
-      // 	pow(SimState->Spheres[0].Radius, 2);
+      SimState->SphereCount = 2;
+      SimState->Spheres[0].Model = glm::mat4(1.0f);
+      SimState->Spheres[0].Position = glm::vec3(3.0f, 4.0f, 2.0f);
+      SimState->Spheres[0].V = glm::vec3(0.0f);
+      SimState->Spheres[0].Forces = glm::vec3(0.0f);
+      SimState->Spheres[0].Angles = glm::vec3(0.0f);
+      SimState->Spheres[0].W = glm::vec3(0.0f);
+      SimState->Spheres[0].Torque = glm::vec3(0.0f);
+      SimState->Spheres[0].Radius = 1.0f;
+      SimState->Spheres[0].Mass = 10.0f;
+      SimState->Spheres[0].MOI = (2.0f / 5.0f) * SimState->Spheres[0].Mass *
+      	pow(SimState->Spheres[0].Radius, 2);
+      
+      SimState->Spheres[1].Model = glm::mat4(1.0f);
+      SimState->Spheres[1].Position = glm::vec3(3.0f, 4.0f, 2.0f);
+      SimState->Spheres[1].V = glm::vec3(0.0f);
+      SimState->Spheres[1].Forces = glm::vec3(0.0f);
+      SimState->Spheres[1].Angles = glm::vec3(0.0f);
+      SimState->Spheres[1].W = glm::vec3(0.0f);
+      SimState->Spheres[1].Torque = glm::vec3(0.0f);
+      SimState->Spheres[1].Radius = 1.0f;
+      SimState->Spheres[1].Mass = 10.0f;
+      SimState->Spheres[1].MOI = (2.0f / 5.0f) * SimState->Spheres[1].Mass *
+      	pow(SimState->Spheres[1].Radius, 2);
 
       // NOTE(Jovan): Floor init
       SimState->Floor.Model = glm::mat4(1.0);
@@ -1517,14 +1542,15 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Physics stuff
   // --------------------------
+  std::vector<contact_pair> Pairs;
   // CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   // CubeAddForce(SimState, 1, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   //CubeAddTorque(SimState,0, glm::vec3(1.0));
   IntegrateForces(SimState, dt);
   // TODO IMPORTANT (Jovan): Generalize collision AND STABILIZE PLS
   // TODO(Jovan): Form pairs?
-  DetectCollisions(SimState, Input, Render, dt);
-  //SolveConstraint(SimState, dt);
+  DetectCollisions(SimState, Input, Render, dt, Pairs);
+  SolveConstraints(SimState, dt, Pairs);
   // TODO(Jovan): Integrate velocities here?
   IntegrateVelocities(SimState, dt);
   // NOTE(Jovan): End physics stuff
@@ -1661,7 +1687,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // TODO(Jovan): Fix this
 #if DRAW_MINKOWSKI
-  DrawMinkowski(SimState, Render, &SimState->Pairs[0]);
+  //DrawMinkowski(SimState, Render, &SimState->Pairs[0]);
 #endif
   
   // NOTE(Jovan): End Minkowski sum drawing
@@ -1739,14 +1765,14 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // --------------------
 #if LOGGING
   // TODO(Jovan): Make better logging
-  printf("Pair count: %d\n", SimState->PairCount);
-  printf("Floor coords:");
+  printf("Pair count: %ld\n", Pairs.size());
+  // printf("Floor coords:");
   //PrintVector(SimState->Floor.Position);
   //  printf("Collision: %d\n", CollisionHappened);
   //printf("Triangles: %d\n", SimState->Triangle->Count);
-  printf("Normals:\n");
+  //  printf("Normals:\n");
   //PrintVector(SimState->Triangle->N[0]);
-  printf("Cube 0 position:");
+  //printf("Cube 0 position:");
   //PrintVector(SimState->Cubes[0].Position);
 #endif
   // NOTE(Jovan): End logging

@@ -305,7 +305,7 @@ struct sdl_state
   /* triangle *Triangle; */
 
   // TODO(jovan): Memory arenas as well, maybe into a "world" struct?
-  contact_pair Pairs[32];
+  //contact_pair Pairs[32];
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
   // NOTE(Jovan): The floor is just a giant squished cube
