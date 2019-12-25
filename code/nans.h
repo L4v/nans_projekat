@@ -60,7 +60,7 @@ typedef double real64;
 #define Assert(Expression)
 #endif
 
-//#define PrintVector(Vector) printf("%f %f %f\n", Vector.x, Vector.y, Vector.z)
+#define PrintVector(Vector) printf("%f %f %f\n", Vector.x, Vector.y, Vector.z)
 
 
   enum collision_type
@@ -289,6 +289,9 @@ struct contact_pair
   // NOTE(Jovan): Indices of objects
   int32 IndexA;
   int32 IndexB;
+
+  glm::vec3 PosA;
+  glm::vec3 PosB;
 };
 
 struct sdl_state
@@ -308,7 +311,7 @@ struct sdl_state
   //contact_pair Pairs[32];
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
-  // NOTE(Jovan): The floor is just a giant squished cube
+  // NOTE(Jovan): The floor is just a giant cube
   cube Floor;
   
   sdl_camera Camera;
