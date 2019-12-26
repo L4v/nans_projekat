@@ -135,40 +135,40 @@ HandleInput(sdl_state* State, sdl_input* Input, real32 dt)
     }
   if(Input->KeyboardController.DebugLeft.EndedDown)
     {
-      State->Spheres[0].Position += dt * glm::vec3(1.0, 0.0, 0.0);
+      State->Cubes[0].Position += dt * glm::vec3(1.0, 0.0, 0.0);
     }
   if(Input->KeyboardController.DebugRight.EndedDown)
     {
-      State->Spheres[0].Position += dt * glm::vec3(-1.0, 0.0, 0.0);
+      State->Cubes[0].Position += dt * glm::vec3(-1.0, 0.0, 0.0);
     }
   if(Input->KeyboardController.DebugUp.EndedDown)
     {
-      State->Spheres[0].Position += dt * glm::vec3(0.0, 1.0, 0.0);
+      State->Cubes[0].Position += dt * glm::vec3(0.0, 1.0, 0.0);
     }
   if(Input->KeyboardController.DebugDown.EndedDown)
     {
-      State->Spheres[0].Position += dt * glm::vec3(0.0, -1.0, 0.0);
+      State->Cubes[0].Position += dt * glm::vec3(0.0, -1.0, 0.0);
     }
   if(Input->KeyboardController.DebugForward.EndedDown)
     {
-      State->Spheres[0].Position += dt * glm::vec3(0.0, 0.0, 1.0);
+      State->Cubes[0].Position += dt * glm::vec3(0.0, 0.0, 1.0);
     }
   if(Input->KeyboardController.DebugBack.EndedDown)
     {
-      State->Spheres[0].Position += dt * glm::vec3(0.0, 0.0, -1.0);
+      State->Cubes[0].Position += dt * glm::vec3(0.0, 0.0, -1.0);
     }
   // TODO(Jovan): For debugging
   if(Input->KeyboardController.DebugReset.EndedDown)
     {
-      State->Spheres[0].Position = glm::vec3(2.0, 2.6, 2.0);
-      State->Spheres[0].V = glm::vec3(0.0f);
-      State->Spheres[0].W = glm::vec3(0.0f);
-      State->Spheres[0].Angles = glm::vec3(0.0f);
+      State->Cubes[0].Position = glm::vec3(2.0, 2.6, 2.0);
+      State->Cubes[0].V = glm::vec3(0.0f);
+      State->Cubes[0].W = glm::vec3(0.0f);
+      State->Cubes[0].Angles = glm::vec3(0.0f);
       
-      State->Spheres[1].Position = glm::vec3(2.0, 1.5, 2.0);
-      State->Spheres[1].V = glm::vec3(0.0f);
-      State->Spheres[1].W = glm::vec3(0.0f);
-      State->Spheres[1].Angles = glm::vec3(0.0f);
+      State->Cubes[1].Position = glm::vec3(2.0, 1.5, 2.0);
+      State->Cubes[1].V = glm::vec3(0.0f);
+      State->Cubes[1].W = glm::vec3(0.0f);
+      State->Cubes[1].Angles = glm::vec3(0.0f);
       
       // State->Spheres[2].Position = glm::vec3(2.0, 4.0, 2.0);
       // State->Spheres[2].V = glm::vec3(0.0f);
@@ -476,8 +476,8 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
       }break;
     case CF:
       {
-	glm::vec3 SupportA = GetCubeSupport(State, Pair->IndexA, -1.0f * Direction);
-	glm::vec3 SupportB = GetFloorSupport(State, Direction);
+	glm::vec3 SupportA = GetCubeSupport(State, Pair->IndexA, Direction);
+	glm::vec3 SupportB = GetFloorSupport(State, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
       }break;
@@ -1199,12 +1199,12 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
   JMJ = 1.0f / JMJ;
   
   // NOTE(Jovan): Baumgarte
-  real32 Beta = 0.2f;
+  real32 Beta = 0.4f;
   // NOTE(Jovan): Bias
   real32 B = Beta/dt * Depth;
   // TODO(Jovan): Restitution bias
   // TODO(Jovan): Friction?
-  int32 Iter = 32;
+  int32 Iter = 70;
   Pair->DeltaLambda = 0;
   while(Iter--)
     {
@@ -1399,6 +1399,7 @@ internal void
 DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 dt,
 		 std::vector<contact_pair>& Pairs)
 {
+  #if 1
   // NOTE(Jovan): CC
   for(uint32 Cube1 = 0;
       Cube1 < State->CubeCount;
@@ -1443,53 +1444,56 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
   	    }
     	}
     }
-
-#if 0
+#endif 
+#if 1
   // NOTE(Jovan): With floor
-  contact_pair Pair = {};
-  Pair.Type = FC;
-  Pair.IndexA = 0;
-  Pair.IndexB = 0;
-  bool32 CollisionHappened = 0;
-  std::vector<vertex> Simplex;
-  CollisionHappened = CheckCollision(State, &Pair, Simplex);
-  if(CollisionHappened)
+  for(uint32 CubeIndex = 0;
+      CubeIndex < State->CubeCount;
+      ++CubeIndex)
     {
-      printf("Floor!\n");
-      ResolveCollision(State, &Pair, Input, &Pair.PointB, Simplex); 
-      Pair.Type = CF;
-      Pair.IndexA = 0;
-      Pair.IndexB = 0;
-      CheckCollision(State, &Pair, Simplex);
-      // TODO(Jovan): Make it a chain call for Resolve?
-      Pair.Normal = ResolveCollision(State, &Pair, Input, &Pair.PointA, Simplex);
-      DrawCollisionDepth(State, &Pair, Render);
-      //PushPair(State, Pair);
-      bool32 Exists = 0;
-      for(std::vector<contact_pair>::iterator it = Pairs.begin();
-	  it != Pairs.end();
-	  ++it)
+      contact_pair Pair = {};
+      Pair.Type = FC;
+      Pair.IndexA = CubeIndex;
+      Pair.IndexB = CubeIndex;
+      bool32 CollisionHappened = 0;
+      std::vector<vertex> Simplex;
+      CollisionHappened = CheckCollision(State, &Pair, Simplex);
+      if(CollisionHappened)
 	{
-	  if((it->IndexA == Pair.IndexA && it->IndexB == Pair.IndexB) ||
-	     (it->IndexA == Pair.IndexB && it->IndexB == Pair.IndexA))
+	  ResolveCollision(State, &Pair, Input, &Pair.PointB, Simplex); 
+	  Pair.Type = CF;
+	  CheckCollision(State, &Pair, Simplex);
+	  // TODO(Jovan): Make it a chain call for Resolve?
+	  Pair.Normal = ResolveCollision(State, &Pair, Input, &Pair.PointA, Simplex);
+	  DrawCollisionDepth(State, &Pair, Render);
+	  //PushPair(State, Pair);
+	  bool32 Exists = 0;
+	  for(std::vector<contact_pair>::iterator it = Pairs.begin();
+	      it != Pairs.end();
+	      ++it)
 	    {
-	      Exists = 1;
+	      if((it->IndexA == Pair.IndexA && it->IndexB == Pair.IndexB) ||
+		 (it->IndexA == Pair.IndexB && it->IndexB == Pair.IndexA))
+		{
+		  Exists = 1;
+		}
+	    }
+	  if(Exists == 0)
+	    {
+	      Pairs.push_back(Pair);
 	    }
 	}
-      if(Exists == 0)
-	{
-	  Pairs.push_back(Pair);
-	}
     }
-#endif	  
+#endif
+#if 0
   uint32 Sphere1 = 0;
   uint32 Sphere2 = 1;
-  contact_pair Pair = {};
+  Pair = {};
   Pair.Type = SS;
   Pair.IndexA = Sphere2;
   Pair.IndexB = Sphere1;
-  bool32 CollisionHappened = 0;
-  std::vector<vertex> Simplex;
+  CollisionHappened = 0;
+  Simplex.clear();
   CollisionHappened = CheckCollision(State, &Pair, Simplex);
   if(CollisionHappened)
     {
@@ -1518,6 +1522,7 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
 	  Pairs.push_back(Pair);
 	}
     }
+#endif
 }
 
 internal void
@@ -1695,7 +1700,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Floor.Angles = glm::vec3(0.0);
       SimState->Floor.W = glm::vec3(0.0);
       SimState->Floor.Torque = glm::vec3(0.0);
-      SimState->Floor.Size = 1.0f;
+      SimState->Floor.Size = 20.0f;
       SimState->Floor.Mass = 1.0f;
       SimState->Floor.MOI = (SimState->Floor.Mass / 12.0f) *
       	(2.0f * SimState->Floor.Size * SimState->Floor.Size);
@@ -1730,8 +1735,9 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // NOTE(Jovan): Physics stuff
   // --------------------------
   std::vector<contact_pair> Pairs;
-  // CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
-  // CubeAddForce(SimState, 1, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  CubeAddForce(SimState, 1, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  CubeAddForce(SimState, 2, SimState->Cubes[2].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   //CubeAddTorque(SimState,0, glm::vec3(1.0));
   IntegrateForces(SimState, dt);
   DetectCollisions(SimState, Input, Render, dt, Pairs);
@@ -1854,7 +1860,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SimState->Floor.Model = glm::rotate(SimState->Floor.Model, glm::radians(SimState->Floor.Angles.z),
 				      glm::vec3(0.0f, 0.0f, 1.0f));
   SimState->Floor.Model = glm::scale(SimState->Floor.Model,
-				     glm::vec3(SimState->Floor.Size));
+				     glm::vec3(SimState->Floor.Size, 1.0, SimState->Floor.Size));
   SetUniformM4(Render->Shaders[0], "Model", SimState->Floor.Model);
   FloorUpdateVertices(SimState);
   glBindVertexArray(Render->VAOs[0]);
