@@ -11,7 +11,7 @@
 #include <cstdio>
 #include <vector>
 #include <time.h>
-#include <cmath>
+#include <math.h>
 
 #define internal static
 #define global_variable static
@@ -178,6 +178,7 @@ struct vertex
 {
   glm::vec3 P;
   glm::vec3 SupA;
+  glm::vec3 SupB;
   
   inline bool operator==(const vertex& R)
     {

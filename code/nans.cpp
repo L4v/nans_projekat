@@ -1,5 +1,21 @@
 #include "nans.h"
 
+// NOTE(Jovan): Checks if a float is NaN or inf
+internal bool32
+IsValid(real32 f)
+{
+  bool32 Result = 0;
+  if(isnan(f) || isinf(f))
+    {
+      Result = 0;
+    }
+  else
+    {
+      Result = 1;
+    }
+  return Result;
+}
+
 internal void
 SetUniformM4(uint32 ID, char* Uniform, const glm::mat4 &Mat4)
 {
@@ -475,6 +491,7 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
 	glm::vec3 SupportB = GetCubeSupport(State, Pair->IndexB, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
+	Result.SupB = SupportB;
       }break;
     case CS:
       {
@@ -482,6 +499,7 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
 	glm::vec3 SupportB = GetSphereSupport(State, Pair->IndexB, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
+	Result.SupB = SupportB;
       }break;
     case SC:
       {
@@ -489,6 +507,7 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
 	glm::vec3 SupportB = GetCubeSupport(State, Pair->IndexB, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
+	Result.SupB = SupportB;
       }break;
     case CF:
       {
@@ -496,6 +515,7 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
 	glm::vec3 SupportB = GetFloorSupport(State, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
+	Result.SupB = SupportB;
       }break;
     case FC:
       {
@@ -503,6 +523,7 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
 	glm::vec3 SupportB = GetCubeSupport(State, Pair->IndexB, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
+	Result.SupB = SupportB;
       }break;
     case SS:
       {
@@ -510,6 +531,7 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
 	glm::vec3 SupportB = GetSphereSupport(State, Pair->IndexB, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
+	Result.SupB = SupportB;
       }break;
     case SF:
       {
@@ -517,6 +539,7 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
 	glm::vec3 SupportB = GetFloorSupport(State, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
+	Result.SupB = SupportB;
       }break;
     case FS:
       {
@@ -524,6 +547,7 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
 	glm::vec3 SupportB = GetSphereSupport(State, Pair->IndexB, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
+	Result.SupB = SupportB;
       }break;
     }
   Simplex.push_back(Result);//PushVertex(State->Simplex, Result);
@@ -778,6 +802,168 @@ EvolveSimplex(sdl_state* State, contact_pair* Pair, glm::vec3 PositionA, glm::ve
   return Result;
 }
 
+internal void
+Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
+	    real32* U, real32* V, real32* W)
+{
+  glm::vec3 V0 = B - A, V1 = C - A, V2 = P - A;
+  real32 D00 = glm::dot(V0, V0);
+  real32 D01 = glm::dot(V0, V1);
+  real32 D11 = glm::dot(V1, V1);
+  real32 D20 = glm::dot(V2, V0);
+  real32 D21 = glm::dot(V2, V1);
+  real32 Denom = D00 * D11 - D01 * D01;
+  *V = (D11 * D20 - D01 * D21) / Denom;
+  *W = (D00 * D21 - D01 * D20) / Denom;
+  *U = 1.0f - *V - *W;
+}
+
+internal bool32
+ResolveCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simplex)
+{
+  int32 CurrIter = 0;
+  //simplex* Simplex = State->Simplex;
+  //edge* Edge = State->Edge;
+  //triangle* Triangle = State->Triangle;
+  std::vector<edge> Edge;
+  std::vector<triangle> Triangle;
+  glm::vec3 Result;
+  // NOTE(Jovan): Take over points from GJK and construct a tetrahedron
+  vertex A = Simplex[0];//Simplex->Vertices[0];
+  vertex B = Simplex[1];//Simplex->Vertices[1];
+  vertex C = Simplex[2];//Simplex->Vertices[2];
+  vertex D = Simplex[3];//Simplex->Vertices[3];
+  PushTriangle(Triangle, A, B, C); // ABC
+  PushTriangle(Triangle, A, C, D); // ACD
+  PushTriangle(Triangle, A, D, B); // ADB
+  PushTriangle(Triangle, B, D, C); // BDC
+  
+  //Assert(Simplex->Count >= 4);
+  while(CurrIter++ <= MAX_EPA_ITERATIONS)
+    {
+      // NOTE(Jovan): Find the closest triangle
+      //uint32 ClosestIndex = 0;
+      real32 CurrentDistance = glm::abs(glm::dot(Triangle[0].N, Triangle[0].A.P));//Triangle->N[0], Triangle->A[0].P));
+      // for(uint32 TriangleIndex = 0;
+      // 	  TriangleIndex < Triangle->Count;
+      // 	  ++TriangleIndex)
+      std::vector<triangle>::iterator ClosestIt = Triangle.begin();
+      for(std::vector<triangle>::iterator it = Triangle.begin();
+	  it != Triangle.end();
+	  ++it)
+	{
+	  glm::vec3 AB = it->B.P - it->A.P;//Triangle->B[TriangleIndex].P - Triangle->A[TriangleIndex].P;
+	  glm::vec3 AC = it->C.P - it->A.P;//Triangle->C[TriangleIndex].P - Triangle->A[TriangleIndex].P;
+	  glm::vec3 Normal = glm::normalize(glm::cross(AB, AC));
+	  real32 Distance = glm::abs(glm::dot(Normal, it->A.P));//Triangle->A[TriangleIndex].P));
+	  if(Distance < CurrentDistance)
+	    {
+	      CurrentDistance = Distance;
+	      ClosestIt = it;//ClosestIndex = TriangleIndex;
+	    }
+	}
+      
+      //CurrentDistance = CurrentDistance == 0 ? 0.01 : CurrentDistance;
+      
+      glm::vec3 Direction = ClosestIt->N;//Triangle->N[ClosestIndex];
+      vertex NewSupport = CalculateSupport(State, Pair, Direction, Simplex);
+
+
+      // NOTE(Jovan): Extrapolate contact data
+      if(glm::dot(/*Triangle->N[ClosestIndex]*/ClosestIt->N, NewSupport.P) - CurrentDistance < MAX_EPA_ERROR)
+	{
+	  real32 BaryU, BaryV, BaryW;
+	  // Barycentric(Triangle->N[ClosestIndex] * CurrentDistance,
+	  // 	      Triangle->A[ClosestIndex].P,
+	  // 	      Triangle->B[ClosestIndex].P,
+	  // 	      Triangle->C[ClosestIndex].P,
+	  // 	      &BaryU, &BaryV, &BaryW);
+	  Barycentric(ClosestIt->N * CurrentDistance,
+	  	      ClosestIt->A.P,
+	  	      ClosestIt->B.P,
+	  	      ClosestIt->C.P,
+	  	      &BaryU, &BaryV, &BaryW);
+	  // glm::vec3 CollisionPoint = ((BaryU * Triangle->A[ClosestIndex].SupA) +
+	  // 			      (BaryV * Triangle->B[ClosestIndex].SupA) +
+	  // 			      (BaryW * Triangle->C[ClosestIndex].SupA));
+	  if(fabs(BaryU) > 1.0f || fabs(BaryV) > 1.0f || fabs(BaryW) > 1.0f)
+	    {
+	      // NOTE(Jovan): No collision
+	      return 0;
+	    }
+	  
+	  if(!IsValid(BaryU) || !IsValid(BaryV) || !IsValid(BaryW))
+	    {
+	      // NOTE(Jovan): No collision
+	      return 0;
+	    }
+	  // NOTE(Jovan): Contact info for body A
+	  glm::vec3 CollisionPoint = ((BaryU * ClosestIt->A.SupA) +
+	  			      (BaryV * ClosestIt->B.SupA) +
+	  			      (BaryW * ClosestIt->C.SupA));
+	  glm::vec3 CollisionNormal = -1.0f * ClosestIt->N;//Triangle->N[ClosestIndex];
+	  real32 Depth = CurrentDistance;
+	  State->Depth = Depth;
+
+	  // NOTE(Jovan): Return the collision Point
+	  Pair->PointA = CollisionPoint;
+	  Pair->Normal = CollisionNormal;
+
+	  // NOTE(Jovan): Return the closest index for indexing the collision normal
+	  // from the triangle list
+
+	  // NOTE(Jovan): Contact info for body B
+	  CollisionPoint = ((BaryU * ClosestIt->A.SupB) +
+			    (BaryV * ClosestIt->B.SupB) +
+			    (BaryW * ClosestIt->C.SupB));
+	  Pair->PointB = CollisionPoint;
+	  return 1;
+	}
+      // NOTE(Jovan): Removing triangle that can be "seen" by the new point
+      // for(uint32 TriangleIndex = 0;
+      // 	  TriangleIndex < Triangle->Count;)
+      // 	{
+      for(std::vector<triangle>::iterator it = Triangle.begin();
+	  it != Triangle.end();)
+	{
+	  glm::vec3 Temp = NewSupport.P - it->A.P;//Triangle->A[TriangleIndex].P;
+	  glm::vec3 AB = it->B.P - it->A.P;//Triangle->B[TriangleIndex].P - Triangle->A[TriangleIndex].P;
+	  glm::vec3 AC = it->C.P - it->A.P;//Triangle->C[TriangleIndex].P - Triangle->A[TriangleIndex].P;
+	  glm::vec3 Normal = glm::normalize(glm::cross(AB, AC));
+	  if(glm::dot(Normal, it->A.P) < 0)//Triangle->A[TriangleIndex].P) < 0)
+	    {
+	      Normal *= -1.0f;
+	    }
+	  if(glm::dot(Normal, Temp) > 0)
+	    {
+	      // NOTE(Jovan): "Disolve" the removed triangle into it's edges
+	      // and push them onto the edge list
+	      PushEdge(Edge, it->A, it->B);//Triangle->A[TriangleIndex], Triangle->B[TriangleIndex]); // AB
+	      PushEdge(Edge, it->B, it->C);//Triangle->B[TriangleIndex], Triangle->C[TriangleIndex]); // BC
+	      PushEdge(Edge, it->C, it->A);//Triangle->C[TriangleIndex], Triangle->A[TriangleIndex]); // CA
+	      Triangle.erase(it);//RemoveTriangle(Triangle, TriangleIndex);
+	      continue;
+	    }
+	  ++it;//++TriangleIndex;
+	}
+
+      // NOTE(Jovan): Construct new triangles
+      // for(uint32 EdgeIndex = 0;
+      // 	  EdgeIndex < Edge->Count;
+      // 	  ++EdgeIndex)
+      for(std::vector<edge>::iterator it = Edge.begin();
+	  it != Edge.end();
+	  ++it)
+	{
+	  PushTriangle(Triangle, NewSupport, it->A, it->B);//Edge->A[EdgeIndex], Edge->B[EdgeIndex]);
+	}
+      // NOTE(Jovan): Clear the edge list
+      Edge.clear();//ClearEdges(Edge);
+    }
+  // TODO(Jovan): Should it be 0?
+  return 0;
+}
+
 internal bool32
 CheckCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simplex)
 {
@@ -843,7 +1029,7 @@ CheckCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simple
   
   if(EvolutionResult == FoundIntersection)
     {
-      Result = 1;
+      Result = ResolveCollision(State, Pair, Simplex);//1;
     }
   if(EvolutionResult == NoIntersection)
     {
@@ -851,22 +1037,6 @@ CheckCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simple
     }
   State->GJKIteration = 0;
   return Result;
-}
-
-internal void
-Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
-	    real32* U, real32* V, real32* W)
-{
-  glm::vec3 V0 = B - A, V1 = C - A, V2 = P - A;
-  real32 D00 = glm::dot(V0, V0);
-  real32 D01 = glm::dot(V0, V1);
-  real32 D11 = glm::dot(V1, V1);
-  real32 D20 = glm::dot(V2, V0);
-  real32 D21 = glm::dot(V2, V1);
-  real32 Denom = D00 * D11 - D01 * D01;
-  *V = (D11 * D20 - D01 * D21) / Denom;
-  *W = (D00 * D21 - D01 * D20) / Denom;
-  *U = 1.0f - *V - *W;
 }
 
 internal void
@@ -891,134 +1061,6 @@ DrawTriangles(sdl_state* State, sdl_render* Render)
   //     glBindVertexArray(Render->VAOs[3]);
   //     glDrawArrays(GL_TRIANGLES, 0, 3);
   //  }
-}
-
-internal glm::vec3
-ResolveCollision(sdl_state* State, contact_pair* Pair, sdl_input* Input, glm::vec3* Point,
-		 std::vector<vertex>& Simplex)
-{
-  int32 CurrIter = 0;
-  //simplex* Simplex = State->Simplex;
-  //edge* Edge = State->Edge;
-  //triangle* Triangle = State->Triangle;
-  std::vector<edge> Edge;
-  std::vector<triangle> Triangle;
-  glm::vec3 Result;
-  // NOTE(Jovan): Take over points from GJK and construct a tetrahedron
-  vertex A = Simplex[0];//Simplex->Vertices[0];
-  vertex B = Simplex[1];//Simplex->Vertices[1];
-  vertex C = Simplex[2];//Simplex->Vertices[2];
-  vertex D = Simplex[3];//Simplex->Vertices[3];
-  PushTriangle(Triangle, A, B, C); // ABC
-  PushTriangle(Triangle, A, C, D); // ACD
-  PushTriangle(Triangle, A, D, B); // ADB
-  PushTriangle(Triangle, B, D, C); // BDC
-  
-  //Assert(Simplex->Count >= 4);
-  while(CurrIter++ <= MAX_EPA_ITERATIONS)
-    {
-      // NOTE(Jovan): Find the closest triangle
-      //uint32 ClosestIndex = 0;
-      real32 CurrentDistance = glm::abs(glm::dot(Triangle[0].N, Triangle[0].A.P));//Triangle->N[0], Triangle->A[0].P));
-      // for(uint32 TriangleIndex = 0;
-      // 	  TriangleIndex < Triangle->Count;
-      // 	  ++TriangleIndex)
-      std::vector<triangle>::iterator ClosestIt = Triangle.begin();
-      for(std::vector<triangle>::iterator it = Triangle.begin();
-	  it != Triangle.end();
-	  ++it)
-	{
-	  glm::vec3 AB = it->B.P - it->A.P;//Triangle->B[TriangleIndex].P - Triangle->A[TriangleIndex].P;
-	  glm::vec3 AC = it->C.P - it->A.P;//Triangle->C[TriangleIndex].P - Triangle->A[TriangleIndex].P;
-	  glm::vec3 Normal = glm::normalize(glm::cross(AB, AC));
-	  real32 Distance = glm::abs(glm::dot(Normal, it->A.P));//Triangle->A[TriangleIndex].P));
-	  if(Distance < CurrentDistance)
-	    {
-	      CurrentDistance = Distance;
-	      ClosestIt = it;//ClosestIndex = TriangleIndex;
-	    }
-	}
-      
-      //CurrentDistance = CurrentDistance == 0 ? 0.01 : CurrentDistance;
-      
-      glm::vec3 Direction = ClosestIt->N;//Triangle->N[ClosestIndex];
-      vertex NewSupport = CalculateSupport(State, Pair, Direction, Simplex);
-
-
-      // NOTE(Jovan): Calculate collision point and normal as linear combination
-      // of barycentric pointss
-      if(glm::dot(/*Triangle->N[ClosestIndex]*/ClosestIt->N, NewSupport.P) - CurrentDistance < MAX_EPA_ERROR)
-	{
-	  real32 BaryU, BaryV, BaryW;
-	  // Barycentric(Triangle->N[ClosestIndex] * CurrentDistance,
-	  // 	      Triangle->A[ClosestIndex].P,
-	  // 	      Triangle->B[ClosestIndex].P,
-	  // 	      Triangle->C[ClosestIndex].P,
-	  // 	      &BaryU, &BaryV, &BaryW);
-	  Barycentric(ClosestIt->N * CurrentDistance,
-	  	      ClosestIt->A.P,
-	  	      ClosestIt->B.P,
-	  	      ClosestIt->C.P,
-	  	      &BaryU, &BaryV, &BaryW);
-	  // glm::vec3 CollisionPoint = ((BaryU * Triangle->A[ClosestIndex].SupA) +
-	  // 			      (BaryV * Triangle->B[ClosestIndex].SupA) +
-	  // 			      (BaryW * Triangle->C[ClosestIndex].SupA));
-	  glm::vec3 CollisionPoint = ((BaryU * ClosestIt->A.SupA) +
-	  			      (BaryV * ClosestIt->B.SupA) +
-	  			      (BaryW * ClosestIt->C.SupA));
-	  glm::vec3 CollisionNormal = -1.0f * ClosestIt->N;//Triangle->N[ClosestIndex];
-	  real32 Depth = CurrentDistance;
-	  State->Depth = Depth;
-
-	  // NOTE(Jovan): Return the collision Point
-	  *Point = CollisionPoint;
-
-	  // NOTE(Jovan): Return the closest index for indexing the collision normal
-	  // from the triangle list
-	  return CollisionNormal;//ClosestIndex;
-	}
-      // NOTE(Jovan): Removing triangle that can be "seen" by the new point
-      // for(uint32 TriangleIndex = 0;
-      // 	  TriangleIndex < Triangle->Count;)
-      // 	{
-      for(std::vector<triangle>::iterator it = Triangle.begin();
-	  it != Triangle.end();)
-	{
-	  glm::vec3 Temp = NewSupport.P - it->A.P;//Triangle->A[TriangleIndex].P;
-	  glm::vec3 AB = it->B.P - it->A.P;//Triangle->B[TriangleIndex].P - Triangle->A[TriangleIndex].P;
-	  glm::vec3 AC = it->C.P - it->A.P;//Triangle->C[TriangleIndex].P - Triangle->A[TriangleIndex].P;
-	  glm::vec3 Normal = glm::normalize(glm::cross(AB, AC));
-	  if(glm::dot(Normal, it->A.P) < 0)//Triangle->A[TriangleIndex].P) < 0)
-	    {
-	      Normal *= -1.0f;
-	    }
-	  if(glm::dot(Normal, Temp) > 0)
-	    {
-	      // NOTE(Jovan): "Disolve" the removed triangle into it's edges
-	      // and push them onto the edge list
-	      PushEdge(Edge, it->A, it->B);//Triangle->A[TriangleIndex], Triangle->B[TriangleIndex]); // AB
-	      PushEdge(Edge, it->B, it->C);//Triangle->B[TriangleIndex], Triangle->C[TriangleIndex]); // BC
-	      PushEdge(Edge, it->C, it->A);//Triangle->C[TriangleIndex], Triangle->A[TriangleIndex]); // CA
-	      Triangle.erase(it);//RemoveTriangle(Triangle, TriangleIndex);
-	      continue;
-	    }
-	  ++it;//++TriangleIndex;
-	}
-
-      // NOTE(Jovan): Construct new triangles
-      // for(uint32 EdgeIndex = 0;
-      // 	  EdgeIndex < Edge->Count;
-      // 	  ++EdgeIndex)
-      for(std::vector<edge>::iterator it = Edge.begin();
-	  it != Edge.end();
-	  ++it)
-	{
-	  PushTriangle(Triangle, NewSupport, it->A, it->B);//Edge->A[EdgeIndex], Edge->B[EdgeIndex]);
-	}
-      // NOTE(Jovan): Clear the edge list
-      Edge.clear();//ClearEdges(Edge);
-    }
-  return glm::vec3(0.0);
 }
 
 internal void
@@ -1427,21 +1469,14 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
   	{
   	  contact_pair Pair = {};
   	  Pair.Type = CC;
-  	  Pair.IndexA = Cube2;
-  	  Pair.IndexB = Cube1;
+  	  Pair.IndexA = Cube1;
+  	  Pair.IndexB = Cube2;
   	  bool32 CollisionHappened = 0;
   	  std::vector<vertex> Simplex;
   	  CollisionHappened = CheckCollision(State, &Pair, Simplex);
   	  if(CollisionHappened)
   	    {
-  	      ResolveCollision(State, &Pair, Input, &Pair.PointB, Simplex); 
-  	      Pair.IndexA = Cube1;
-  	      Pair.IndexB = Cube2;
-  	      CheckCollision(State, &Pair, Simplex);
-  	      // TODO(Jovan): Make it a chain call for Resolve?
-  	      Pair.Normal = ResolveCollision(State, &Pair, Input, &Pair.PointA, Simplex);
   	      DrawCollisionDepth(State, &Pair, Render);
-  	      //PushPair(State, Pair);
   	      bool32 Exists = 0;
   	      for(std::vector<contact_pair>::iterator it = Pairs.begin();
   		  it != Pairs.end();
@@ -1468,7 +1503,7 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
       ++CubeIndex)
     {
       contact_pair Pair = {};
-      Pair.Type = FC;
+      Pair.Type = CF;
       Pair.IndexA = CubeIndex;
       Pair.IndexB = CubeIndex;
       bool32 CollisionHappened = 0;
@@ -1476,13 +1511,7 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
       CollisionHappened = CheckCollision(State, &Pair, Simplex);
       if(CollisionHappened)
 	{
-	  ResolveCollision(State, &Pair, Input, &Pair.PointB, Simplex); 
-	  Pair.Type = CF;
-	  CheckCollision(State, &Pair, Simplex);
-	  // TODO(Jovan): Make it a chain call for Resolve?
-	  Pair.Normal = ResolveCollision(State, &Pair, Input, &Pair.PointA, Simplex);
 	  DrawCollisionDepth(State, &Pair, Render);
-	  //PushPair(State, Pair);
 	  bool32 Exists = 0;
 	  for(std::vector<contact_pair>::iterator it = Pairs.begin();
 	      it != Pairs.end();
@@ -1506,16 +1535,12 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
     {
       contact_pair Pair = {};
       std::vector<vertex> Simplex;
-      Pair.Type = FS;
+      Pair.Type = SF;
       Pair.IndexA = SphereIndex;
       Pair.IndexB = SphereIndex;
       bool32 CollisionHappened = CheckCollision(State, &Pair, Simplex);
       if(CollisionHappened)
 	{
-	  ResolveCollision(State, &Pair, Input, &Pair.PointB, Simplex);
-	  Pair.Type = SF;
-	  CheckCollision(State, &Pair, Simplex);
-	  Pair.Normal = ResolveCollision(State, &Pair, Input, &Pair.PointA, Simplex);
 	  bool32 Exists = 0;
 	  for(std::vector<contact_pair>::iterator it = Pairs.begin();
 	      it != Pairs.end();
@@ -1544,23 +1569,15 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
 	  ++CubeIndex)
 	{
 	  contact_pair Pair = {};
-	  Pair.Type = CS;
-	  Pair.IndexA = CubeIndex;
-	  Pair.IndexB = SphereIndex;
+	  Pair.Type = SC;
+	  Pair.IndexA = SphereIndex;
+	  Pair.IndexB = CubeIndex;
 	  bool32 CollisionHappened = 0;
 	  std::vector<vertex> Simplex;
 	  CollisionHappened = CheckCollision(State, &Pair, Simplex);
 	  if(CollisionHappened)
 	    {
-	      ResolveCollision(State, &Pair, Input, &Pair.PointB, Simplex); 
-	      Pair.Type = SC;
-	      Pair.IndexA = SphereIndex;
-	      Pair.IndexB = CubeIndex;
-	      CheckCollision(State, &Pair, Simplex);
-	      // TODO(Jovan): Make it a chain call for Resolve?
-	      Pair.Normal = ResolveCollision(State, &Pair, Input, &Pair.PointA, Simplex);
 	      DrawCollisionDepth(State, &Pair, Render);
-	      //PushPair(State, Pair);
 	      bool32 Exists = 0;
 	      for(std::vector<contact_pair>::iterator it = Pairs.begin();
 		  it != Pairs.end();
@@ -1591,22 +1608,15 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
   	  ++Sphere2)
   	{
   	  contact_pair Pair = {};
-  	  Pair.Type = CC;
-  	  Pair.IndexA = Sphere2;
-  	  Pair.IndexB = Sphere1;
+  	  Pair.Type = SS;
+  	  Pair.IndexA = Sphere1;
+  	  Pair.IndexB = Sphere2;
   	  bool32 CollisionHappened = 0;
   	  std::vector<vertex> Simplex;
   	  CollisionHappened = CheckCollision(State, &Pair, Simplex);
   	  if(CollisionHappened)
   	    {
-  	      ResolveCollision(State, &Pair, Input, &Pair.PointB, Simplex); 
-  	      Pair.IndexA = Sphere1;
-  	      Pair.IndexB = Sphere2;
-  	      CheckCollision(State, &Pair, Simplex);
-  	      // TODO(Jovan): Make it a chain call for Resolve?
-  	      Pair.Normal = ResolveCollision(State, &Pair, Input, &Pair.PointA, Simplex);
   	      DrawCollisionDepth(State, &Pair, Render);
-  	      //PushPair(State, Pair);
   	      bool32 Exists = 0;
   	      for(std::vector<contact_pair>::iterator it = Pairs.begin();
   		  it != Pairs.end();
