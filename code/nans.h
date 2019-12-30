@@ -71,22 +71,17 @@ typedef double real64;
      /* NOTE(Jovan): Types of collisions
 	CC - CUBE x CUBE
 	CS - CUBE x SPHERE
-	SC - SPHERE x CUBE
 	SS - SPHERE x SPHERE
-	CP - CUBE x FLOOR
-	PC - FLOOR x CUBE
-	SP - SPHERE x FLOOR
-	PS - FLOOR x SPHERE
+	CF - CUBE x FLOOR
+	SF - SPHERE x FLOOR
+	
      */
      CC = 0,
      CS,
-     SC,
      CF,
-     FC,
      //
      SS,
-     SF,
-     FS
+     SF
     };
 
 enum evolve_result
@@ -282,13 +277,23 @@ struct contact_pair
   // NOTE(Jovan): Delta Lambda Normal 
   real32 DLNormal;
   real32 DLNormalSum;
+
+  // NOTE(Jovan): Delta Lambda Tangent
+  real32 DLTangent1;
+  real32 DLTangent1Sum;
+  
+  // NOTE(Jovan): Delta Lambda Tangent
+  real32 DLTangent2;
+  real32 DLTangent2Sum;
   
   // NOTE(Jovan): The intersection points
   glm::vec3 PointA;
   glm::vec3 PointB;
 
-  // NOTE(Jovan): Collision normal
-  glm::vec3 Normal;
+  // NOTE(Jovan): Collision normal and tangents
+  glm::vec3 N;
+  glm::vec3 T1;
+  glm::vec3 T2;
 
   // NOTE(Jovan): Indices of objects
   int32 IndexA;

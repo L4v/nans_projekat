@@ -511,26 +511,10 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
 	Result.SupA = SupportA;
 	Result.SupB = SupportB;
       }break;
-    case SC:
-      {
-	glm::vec3 SupportA = GetSphereSupport(State, Pair->IndexA, Direction);	
-	glm::vec3 SupportB = GetCubeSupport(State, Pair->IndexB, -1.0f * Direction);
-	Result.P = SupportA - SupportB;
-	Result.SupA = SupportA;
-	Result.SupB = SupportB;
-      }break;
     case CF:
       {
 	glm::vec3 SupportA = GetCubeSupport(State, Pair->IndexA, Direction);
 	glm::vec3 SupportB = GetFloorSupport(State, -1.0f * Direction);
-	Result.P = SupportA - SupportB;
-	Result.SupA = SupportA;
-	Result.SupB = SupportB;
-      }break;
-    case FC:
-      {
-	glm::vec3 SupportA = GetFloorSupport(State, Direction);
-	glm::vec3 SupportB = GetCubeSupport(State, Pair->IndexB, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
 	Result.SupB = SupportB;
@@ -547,14 +531,6 @@ CalculateSupport(sdl_state* State, contact_pair* Pair, glm::vec3 Direction, std:
       {
 	glm::vec3 SupportA = GetSphereSupport(State, Pair->IndexA, Direction);
 	glm::vec3 SupportB = GetFloorSupport(State, -1.0f * Direction);
-	Result.P = SupportA - SupportB;
-	Result.SupA = SupportA;
-	Result.SupB = SupportB;
-      }break;
-    case FS:
-      {
-	glm::vec3 SupportA = GetFloorSupport(State, Direction);
-	glm::vec3 SupportB = GetSphereSupport(State, Pair->IndexB, -1.0f * Direction);
 	Result.P = SupportA - SupportB;
 	Result.SupA = SupportA;
 	Result.SupB = SupportB;
@@ -899,7 +875,7 @@ ResolveCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simp
 
 	  // NOTE(Jovan): Return the collision Point
 	  Pair->PointA = CollisionPoint;
-	  Pair->Normal = CollisionNormal;
+	  Pair->N = CollisionNormal;
 
 	  // NOTE(Jovan): Return the closest index for indexing the collision normal
 	  // from the triangle list
@@ -973,23 +949,11 @@ CheckCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simple
 					    State->Cubes[IndexA].Position,
 					    State->Spheres[IndexB].Position, Simplex);
 	  }break;
-	case SC:
-	  {
-	    EvolutionResult = EvolveSimplex(State, Pair,
-					    State->Spheres[IndexA].Position,
-					    State->Cubes[IndexB].Position, Simplex);
-	  }break;
 	case CF:
 	  {
 	    EvolutionResult = EvolveSimplex(State, Pair,
 					    State->Cubes[Pair->IndexA].Position,
 					    State->Floor.Position, Simplex);
-	  }break;
-	case FC:
-	  {
-	    EvolutionResult = EvolveSimplex(State, Pair,
-					    State->Floor.Position,
-					    State->Cubes[Pair->IndexB].Position, Simplex);
 	  }break;
 	case SS:
 	  {
@@ -1002,12 +966,6 @@ CheckCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simple
 	    EvolutionResult = EvolveSimplex(State, Pair,
 					    State->Spheres[IndexA].Position,
 					    State->Floor.Position, Simplex);
-	  }break;
-	case FS:
-	  {
-	    EvolutionResult = EvolveSimplex(State, Pair,
-					    State->Floor.Position,
-					    State->Spheres[IndexB].Position, Simplex);
 	  }break;
 	}
     }
@@ -1096,7 +1054,7 @@ IntegrateForces(sdl_state* State, real32 dt)
 internal void
 Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 {
-  glm::vec3 N = Pair->Normal;
+  glm::vec3 N = Pair->N;
 
   // NOTE(Jovan): Calculating J(M^-1)(J^T)
   // ------------------------------------
@@ -1135,19 +1093,19 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 	W1 = State->Cubes[Pair->IndexA].W;
 	W2 = State->Spheres[Pair->IndexB].W;
       }break;
-    case SC:
-      {
-	PosA = State->Spheres[Pair->IndexA].Position;
-        PosB = State->Cubes[Pair->IndexB].Position;
-	InvI1 = 1.0f / State->Spheres[Pair->IndexA].MOI;
-	InvI2 = 1.0f / State->Cubes[Pair->IndexB].MOI;
-	InvM1 = 1.0f / State->Spheres[Pair->IndexA].Mass;
-	InvM2 = 1.0f / State->Cubes[Pair->IndexB].Mass;
-	V1 = State->Spheres[Pair->IndexA].V;
-	V2 = State->Cubes[Pair->IndexB].V;
-	W1 = State->Spheres[Pair->IndexA].W;
-	W2 = State->Cubes[Pair->IndexB].W;
-      }break;
+    // case SC:
+    //   {
+    // 	PosA = State->Spheres[Pair->IndexA].Position;
+    //     PosB = State->Cubes[Pair->IndexB].Position;
+    // 	InvI1 = 1.0f / State->Spheres[Pair->IndexA].MOI;
+    // 	InvI2 = 1.0f / State->Cubes[Pair->IndexB].MOI;
+    // 	InvM1 = 1.0f / State->Spheres[Pair->IndexA].Mass;
+    // 	InvM2 = 1.0f / State->Cubes[Pair->IndexB].Mass;
+    // 	V1 = State->Spheres[Pair->IndexA].V;
+    // 	V2 = State->Cubes[Pair->IndexB].V;
+    // 	W1 = State->Spheres[Pair->IndexA].W;
+    // 	W2 = State->Cubes[Pair->IndexB].W;
+    //   }break;
     case CF:
       {
 	PosA = State->Cubes[Pair->IndexA].Position;
@@ -1161,19 +1119,19 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 	W1 = State->Cubes[Pair->IndexA].W;
 	W2 = State->Floor.W;
       }break;
-    case FC:
-      {
-	PosA = State->Floor.Position;
-	PosB = State->Cubes[Pair->IndexB].Position;
-	InvI1 = 1.0f / State->Floor.MOI;
-	InvI2 = 1.0f / State->Cubes[Pair->IndexB].MOI;
-	InvM1 = 1.0f / State->Floor.Mass;
-	InvM2 = 1.0f / State->Cubes[Pair->IndexB].Mass;
-	V1 = State->Floor.V;
-	V2 = State->Cubes[Pair->IndexB].V;
-	W1 = State->Floor.W;
-	W2 = State->Cubes[Pair->IndexB].W;
-      }break;
+    // case FC:
+    //   {
+    // 	PosA = State->Floor.Position;
+    // 	PosB = State->Cubes[Pair->IndexB].Position;
+    // 	InvI1 = 1.0f / State->Floor.MOI;
+    // 	InvI2 = 1.0f / State->Cubes[Pair->IndexB].MOI;
+    // 	InvM1 = 1.0f / State->Floor.Mass;
+    // 	InvM2 = 1.0f / State->Cubes[Pair->IndexB].Mass;
+    // 	V1 = State->Floor.V;
+    // 	V2 = State->Cubes[Pair->IndexB].V;
+    // 	W1 = State->Floor.W;
+    // 	W2 = State->Cubes[Pair->IndexB].W;
+    //   }break;
     case SS:
       {
 	PosA = State->Spheres[Pair->IndexA].Position;
@@ -1200,19 +1158,19 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 	W1 = State->Spheres[Pair->IndexA].W;
 	W2 = State->Floor.W;
       }break;
-    case FS:
-      {
-	PosA = State->Floor.Position;
-	PosB = State->Spheres[Pair->IndexB].Position;
-	InvI1 = 1.0f / State->Floor.MOI;
-	InvI2 = 1.0f / State->Spheres[Pair->IndexB].MOI;
-	InvM1 = 1.0f / State->Floor.Mass;
-	InvM2 = 1.0f / State->Spheres[Pair->IndexB].Mass;
-	V1 = State->Floor.V;
-	V2 = State->Spheres[Pair->IndexB].V;
-	W1 = State->Floor.W;
-	W2 = State->Spheres[Pair->IndexB].W;
-      }break;
+    // case FS:
+    //   {
+    // 	PosA = State->Floor.Position;
+    // 	PosB = State->Spheres[Pair->IndexB].Position;
+    // 	InvI1 = 1.0f / State->Floor.MOI;
+    // 	InvI2 = 1.0f / State->Spheres[Pair->IndexB].MOI;
+    // 	InvM1 = 1.0f / State->Floor.Mass;
+    // 	InvM2 = 1.0f / State->Spheres[Pair->IndexB].Mass;
+    // 	V1 = State->Floor.V;
+    // 	V2 = State->Spheres[Pair->IndexB].V;
+    // 	W1 = State->Floor.W;
+    // 	W2 = State->Spheres[Pair->IndexB].W;
+    //   }break;
     default:
       {
 	printf("ERROR::CONSTRAINT::Unknown collision type\n");
@@ -1291,25 +1249,25 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1;
 	State->Spheres[Pair->IndexB].W -= InvI2 * AngularI2;
       }break;
-    case SC:
-      {
-	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulse;
-	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
-	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1;
-	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
-      }break;
+    // case SC:
+    //   {
+    // 	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulse;
+    // 	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
+    // 	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1;
+    // 	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
+    //   }break;
     case CF:
       {
 	// NOTE(Jovan): Not updating floor velocities
 	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulse;
 	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1;
       }break;
-    case FC:
-      {
-	// NOTE(Jovan): Not updating floor velocities
-	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
-	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
-      }break;
+    // case FC:
+    //   {
+    // 	// NOTE(Jovan): Not updating floor velocities
+    // 	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
+    // 	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
+    //   }break;
     case SS:
       {
 	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulse;
@@ -1323,12 +1281,12 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulse;
 	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1;
       }break;
-    case FS:
-      {
-	// NOTE(Jovan): Not updating floor velocities
-	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
-	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
-      }break;
+    // case FS:
+    //   {
+    // 	// NOTE(Jovan): Not updating floor velocities
+    // 	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
+    // 	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
+    //   }break;
     default:
       {
 	printf("ERROR::CONSTRAINT::Unknown collision type\n");
@@ -1539,19 +1497,19 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
 	}
     }
 #endif
-#if SC_COLLISIONS
-  for(uint32 SphereIndex = 0;
-      SphereIndex < State->SphereCount;
-      ++SphereIndex)
+#if CS_COLLISIONS
+  for(uint32 CubeIndex = 0;
+      CubeIndex < State->CubeCount;
+      ++CubeIndex)
     {
-      for(uint32 CubeIndex = 0;
-	  CubeIndex < State->CubeCount;
-	  ++CubeIndex)
+      for(uint32 SphereIndex = 0;
+	  SphereIndex < State->SphereCount;
+	  ++SphereIndex)
 	{
 	  contact_pair Pair = {};
-	  Pair.Type = SC;
-	  Pair.IndexA = SphereIndex;
-	  Pair.IndexB = CubeIndex;
+	  Pair.Type = CS;
+	  Pair.IndexA = CubeIndex;
+	  Pair.IndexB = SphereIndex;
 	  bool32 CollisionHappened = 0;
 	  std::vector<vertex> Simplex;
 	  CollisionHappened = CheckCollision(State, &Pair, Simplex);
