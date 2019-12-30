@@ -190,8 +190,6 @@ struct simplex
 struct edge
 {
   uint32 Count;
-  /* vertex* A; */
-  /* vertex* B; */
   vertex A;
   vertex B;
 };
@@ -199,13 +197,10 @@ struct edge
 struct triangle
 {
   uint32 Count;
-  /* vertex* A; */
-  /* vertex* B; */
-  /* vertex* C; */
   vertex A;
   vertex B;
   vertex C;
-  glm::vec3 N;//glm::vec3* N;
+  glm::vec3 N;
 };
 
 struct sdl_camera
@@ -305,19 +300,7 @@ struct contact_pair
 
 struct sdl_state
 {
-  // TODO(jovan): TEMP
-  real32 Depth;
-  
-  // NOTE(Jovan): Vertices for the simplex
-  /* memory_arena SimplexArena; */
-  /* memory_arena EdgeArena; */
-  /* memory_arena TriangleArena; */
-  /* simplex* Simplex; */
-  /* edge *Edge; */
-  /* triangle *Triangle; */
-
   // TODO(jovan): Memory arenas as well, maybe into a "world" struct?
-  //contact_pair Pairs[32];
   cube Cubes[MAX_SPHERE_COUNT];
   sphere Spheres[MAX_SPHERE_COUNT];
   // NOTE(Jovan): The floor is just a giant cube
@@ -327,7 +310,6 @@ struct sdl_state
   uint32 CubeCount;
   uint32 SphereCount;
   uint32 PairCount;
-  uint32 GJKIteration;
 };
 
 // NOTE(Jovan): Return value for ODEs and physics functions

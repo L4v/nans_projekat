@@ -871,7 +871,6 @@ ResolveCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simp
 	  			      (BaryW * ClosestIt->C.SupA));
 	  glm::vec3 CollisionNormal = -1.0f * ClosestIt->N;
 	  real32 Depth = CurrentDistance;
-	  State->Depth = Depth;
 
 	  // NOTE(Jovan): Return the collision Point
 	  Pair->PointA = CollisionPoint;
@@ -932,8 +931,9 @@ CheckCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simple
   evolve_result EvolutionResult = StillEvolving;
   int32 IndexA = Pair->IndexA;
   int32 IndexB = Pair->IndexB;
+  uint32 GJKIteration = 0;
   Simplex.clear();
-  while((EvolutionResult == StillEvolving) && (State->GJKIteration++ <= MAX_GJK_ITERATIONS))
+  while((EvolutionResult == StillEvolving) && (GJKIteration++ <= MAX_GJK_ITERATIONS))
     {
       switch(Pair->Type)
 	{
@@ -978,7 +978,6 @@ CheckCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simple
     {
       Result = 0;
     }
-  State->GJKIteration = 0;
   return Result;
 }
 
@@ -1054,7 +1053,8 @@ IntegrateForces(sdl_state* State, real32 dt)
 internal void
 Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 {
-  glm::vec3 N = Pair->N;
+  glm::vec3 N = glm::normalize(Pair->N);
+  glm::vec3 T1, T2;
 
   // NOTE(Jovan): Calculating J(M^-1)(J^T)
   // ------------------------------------
@@ -1093,19 +1093,6 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 	W1 = State->Cubes[Pair->IndexA].W;
 	W2 = State->Spheres[Pair->IndexB].W;
       }break;
-    // case SC:
-    //   {
-    // 	PosA = State->Spheres[Pair->IndexA].Position;
-    //     PosB = State->Cubes[Pair->IndexB].Position;
-    // 	InvI1 = 1.0f / State->Spheres[Pair->IndexA].MOI;
-    // 	InvI2 = 1.0f / State->Cubes[Pair->IndexB].MOI;
-    // 	InvM1 = 1.0f / State->Spheres[Pair->IndexA].Mass;
-    // 	InvM2 = 1.0f / State->Cubes[Pair->IndexB].Mass;
-    // 	V1 = State->Spheres[Pair->IndexA].V;
-    // 	V2 = State->Cubes[Pair->IndexB].V;
-    // 	W1 = State->Spheres[Pair->IndexA].W;
-    // 	W2 = State->Cubes[Pair->IndexB].W;
-    //   }break;
     case CF:
       {
 	PosA = State->Cubes[Pair->IndexA].Position;
@@ -1119,19 +1106,6 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 	W1 = State->Cubes[Pair->IndexA].W;
 	W2 = State->Floor.W;
       }break;
-    // case FC:
-    //   {
-    // 	PosA = State->Floor.Position;
-    // 	PosB = State->Cubes[Pair->IndexB].Position;
-    // 	InvI1 = 1.0f / State->Floor.MOI;
-    // 	InvI2 = 1.0f / State->Cubes[Pair->IndexB].MOI;
-    // 	InvM1 = 1.0f / State->Floor.Mass;
-    // 	InvM2 = 1.0f / State->Cubes[Pair->IndexB].Mass;
-    // 	V1 = State->Floor.V;
-    // 	V2 = State->Cubes[Pair->IndexB].V;
-    // 	W1 = State->Floor.W;
-    // 	W2 = State->Cubes[Pair->IndexB].W;
-    //   }break;
     case SS:
       {
 	PosA = State->Spheres[Pair->IndexA].Position;
@@ -1158,19 +1132,6 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 	W1 = State->Spheres[Pair->IndexA].W;
 	W2 = State->Floor.W;
       }break;
-    // case FS:
-    //   {
-    // 	PosA = State->Floor.Position;
-    // 	PosB = State->Spheres[Pair->IndexB].Position;
-    // 	InvI1 = 1.0f / State->Floor.MOI;
-    // 	InvI2 = 1.0f / State->Spheres[Pair->IndexB].MOI;
-    // 	InvM1 = 1.0f / State->Floor.Mass;
-    // 	InvM2 = 1.0f / State->Spheres[Pair->IndexB].Mass;
-    // 	V1 = State->Floor.V;
-    // 	V2 = State->Spheres[Pair->IndexB].V;
-    // 	W1 = State->Floor.W;
-    // 	W2 = State->Spheres[Pair->IndexB].W;
-    //   }break;
     default:
       {
 	printf("ERROR::CONSTRAINT::Unknown collision type\n");
@@ -1185,53 +1146,127 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
     }
   R1 = Pair->PointA - PosA;
   R2 = Pair->PointB - PosB;
+
+  // NOTE(Jovan): Calculating tangents (allen chou)
+  // sqrt(1/3) = 0.57735 (http://box2d.org/2014/02/computing-a-basis/)
+  if(N.x >= 0.57735f)
+    {
+      T1 = glm::vec3(N.y, -N.x, 0.0f);
+    }
+  else
+    {
+      T1 = glm::vec3(0.0f, N.z, -N.y);
+    }
+  glm::normalize(T1);
+  T2 = glm::cross(N, T1);
+  Pair->T1 = T1;
+  Pair->T2 = T2;
+  
   
   // NOTE(Jovan): Penetration depth
   real32 Depth = glm::dot(((PosA + R1) - (PosB + R2)), N);
-  
   // NOTE(Jovan): R x N
   glm::vec3 RN1 = glm::cross(R1, N);
   glm::vec3 RN2 = glm::cross(R2, N);
-  // NOTE(Jovan): JMJ
-  real32 JMJ = (InvM1) + (InvM2);
-  JMJ += InvI1 * (glm::dot(RN1, RN1)) - InvI2 * (glm::dot(-RN2, -RN2));
-  // NOTE(Jovan): 1 / (JMJ) (Effective mass)
-  JMJ = 1.0f / JMJ;
-  
+  // NOTE(Jovan): JMJ normal
+  real32 JMJn = (InvM1) + (InvM2);
+  JMJn += InvI1 * (glm::dot(RN1, RN1)) - InvI2 * (glm::dot(-RN2, -RN2));
+  // NOTE(Jovan): 1 / (JMJn) (Effective mass)
+  JMJn = 1.0f / JMJn;
   // NOTE(Jovan): Derivative of V
-  glm::vec3 dV = V1 + glm::cross(W1, N) - V2 - glm::cross(W2, N);
-  real32 JdV = glm::dot(dV, N);
+  glm::vec3 dVn = V1 + glm::cross(W1, N) - V2 - glm::cross(W2, N);
+  real32 JdVn = glm::dot(dVn, N);
   // NOTE(Jovan): Baumgarte
   real32 Beta = 0.4f;
   // NOTE(Jovan): Restitution
-  real32 CR = 0.1;
+  real32 Cr = 0.1;
   // NOTE(Jovan): Bias
-  real32 B = -Beta/dt * Depth + CR * JdV;
-  // TODO(Jovan): Restitution bias
-  // TODO(Jovan): Friction?
+  real32 B = -Beta/dt * Depth + Cr * JdVn;
+
+  // NOTE(Jovan): Friction coefficient
+  real32 Cf = 0.8;
+  // NOTE(Jovan): Friction tangents
+  glm::vec3 R1T1 = glm::cross(R1, T1);
+  glm::vec3 R2T1 = glm::cross(R2, T1);
+  glm::vec3 R1T2 = glm::cross(R1, T2);
+  glm::vec3 R2T2 = glm::cross(R2, T2);
+  real32 JMJt1 = (InvM1) + (InvM2);
+  JMJt1 += InvI1 * (glm::dot(R1T1, R1T1)) - InvI2 * (glm::dot(-R2T1, -R2T1));
+  JMJt1 = 1.0f / JMJt1;
+  real32 JMJt2 = (InvM1) + (InvM2);
+  JMJt2 += InvI1 * (glm::dot(R1T2, R1T2)) - InvI2 * (glm::dot(-R2T2, -R2T2));
+  JMJt2 = 1.0f / JMJt2;
+  glm::vec3 dVt1 = V1 + glm::cross(W1, T1) - V2 - glm::cross(W2, T1);
+  real32 JdVt1 = glm::dot(dVt1, T1);
+  glm::vec3 dVt2 = V1 + glm::cross(W1, T2) - V2 - glm::cross(W2, T2);
+  real32 JdVt2 = glm::dot(dVt1, T2);
+    
   int32 Iter = 70;
-  //Pair->DLNormal = 0;
   while(Iter--)
     {
-      real32 Lambda = (-JdV + B) * JMJ;
-
+      // NOTE(Jovan): Calculating normal lambda
+      // --------------------------------------
+      real32 LambdaN = (-JdVn + B) * JMJn;
       // NOTE(Jovan): Accumulating and clamping impulse
       real32 OldAccumI = Pair->DLNormalSum;
-      Pair->DLNormalSum += Lambda;
+      Pair->DLNormalSum += LambdaN;
       if(Pair->DLNormalSum < 0)
 	{
 	  Pair->DLNormalSum = 0.0f;
 	}
-
       Pair->DLNormal = Pair->DLNormalSum - OldAccumI;
+      // NOTE(Jovan): End of normal
+      // ----------------------------
 
+      // TODO IMPORTANT(Jovan): Tangents not working?
+      // NOTE(Jovan): Calculating tangent lambda
+      // ---------------------------------------
+      real32 LambdaT1 = (-JdVt1) * JMJt1;
+      real32 OldAccumT1 = Pair->DLTangent1Sum;
+      Pair->DLTangent1Sum += LambdaT1;
+      // NOTE(Jovan): For clamping friction lambda to [-Cf*Lambda, Cf*Lambda]
+      real32 MaxLT1 = Cf * LambdaN;
+      if(Pair->DLTangent1Sum < -MaxLT1)
+	{
+	  Pair->DLTangent1Sum = -MaxLT1;
+	}
+      if(Pair->DLTangent1Sum > MaxLT1)
+	{
+	  Pair->DLTangent1Sum = MaxLT1;
+	}
+      Pair->DLTangent1 = Pair->DLTangent1Sum - OldAccumT1;
+      
+      real32 LambdaT2 = (-JdVt2) * JMJt2;
+      real32 OldAccumT2 = Pair->DLTangent2Sum;
+      Pair->DLTangent2Sum += LambdaT2;
+      // NOTE(Jovan): For clamping friction lambda to [-Cf*Lambda, Cf*Lambda]
+      real32 MaxLT2 = Cf * LambdaN;
+      if(Pair->DLTangent2Sum < -MaxLT2)
+	{
+	  Pair->DLTangent2Sum = -MaxLT2;
+	}
+      if(Pair->DLTangent2Sum > MaxLT2)
+	{
+	  Pair->DLTangent2Sum = MaxLT2;
+	}
+      Pair->DLTangent2 = Pair->DLTangent2Sum - OldAccumT2;
+      
+      // NOTE(Jovan): End of tangents
+      // ----------------------------
     }
   // NOTE(Jovan): Calculating linear impulse
   glm::vec3 LinearImpulse = N * Pair->DLNormal;
+  glm::vec3 LinearImpulseT1 = T1 * Pair->DLTangent1;
+  glm::vec3 LinearImpulseT2 = T2 * Pair->DLTangent2;
   // NOTE(Jovan): Calculating angular impulses
   glm::vec3 AngularI1 = RN1 * Pair->DLNormal;
   glm::vec3 AngularI2 = RN2 * Pair->DLNormal;
-
+  glm::vec3 AngularI1T1 = R1T1 * Pair->DLTangent1;
+  glm::vec3 AngularI2T1 = R2T1 * Pair->DLTangent1;
+  glm::vec3 AngularI1T2 = R1T2 * Pair->DLTangent2;
+  glm::vec3 AngularI2T2 = R2T2 * Pair->DLTangent2;
+  // glm::vec3
+  // TODO(Jovan): Apply tangents
   // NOTE(Jovan): Applying linear and angular impulses
   switch(Pair->Type)
     {
@@ -1241,6 +1276,16 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
 	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1;
 	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
+	
+	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulseT1;
+	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulseT1;
+	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1T1;
+	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2T1;
+	
+	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulseT2;
+	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulseT2;
+	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1T2;
+	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2T2;
       }break;
     case CS:
       {
@@ -1248,45 +1293,60 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 	State->Spheres[Pair->IndexB].V -= InvM2 * LinearImpulse;
 	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1;
 	State->Spheres[Pair->IndexB].W -= InvI2 * AngularI2;
+	
+	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulseT1;
+	State->Spheres[Pair->IndexB].V -= InvM2 * LinearImpulseT1;
+	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1T1;
+	State->Spheres[Pair->IndexB].W -= InvI2 * AngularI2T1;
+	
+	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulseT2;
+	State->Spheres[Pair->IndexB].V -= InvM2 * LinearImpulseT2;
+	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1T2;
+	State->Spheres[Pair->IndexB].W -= InvI2 * AngularI2T2;
       }break;
-    // case SC:
-    //   {
-    // 	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulse;
-    // 	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
-    // 	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1;
-    // 	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
-    //   }break;
     case CF:
       {
 	// NOTE(Jovan): Not updating floor velocities
 	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulse;
 	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1;
+	
+	
+	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulseT1;
+	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1T1;
+	
+	State->Cubes[Pair->IndexA].V += InvM1 * LinearImpulseT2;
+	State->Cubes[Pair->IndexA].W += InvI1 * AngularI1T2;
       }break;
-    // case FC:
-    //   {
-    // 	// NOTE(Jovan): Not updating floor velocities
-    // 	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
-    // 	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
-    //   }break;
     case SS:
       {
 	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulse;
 	State->Spheres[Pair->IndexB].V -= InvM2 * LinearImpulse;
 	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1;
 	State->Spheres[Pair->IndexB].W -= InvI2 * AngularI2;
+	
+	
+	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulseT1;
+	State->Spheres[Pair->IndexB].V -= InvM2 * LinearImpulseT1;
+	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1T1;
+	State->Spheres[Pair->IndexB].W -= InvI2 * AngularI2T1;
+	
+	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulseT2;
+	State->Spheres[Pair->IndexB].V -= InvM2 * LinearImpulseT2;
+	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1T2;
+	State->Spheres[Pair->IndexB].W -= InvI2 * AngularI2T2;
       }break;
     case SF:
       {
 	// NOTE(Jovan): Not updating floor velocities
 	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulse;
 	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1;
+        
+	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulseT1;
+	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1T1;
+	
+	State->Spheres[Pair->IndexA].V += InvM1 * LinearImpulseT2;
+	State->Spheres[Pair->IndexA].W += InvI1 * AngularI1T2;
       }break;
-    // case FS:
-    //   {
-    // 	// NOTE(Jovan): Not updating floor velocities
-    // 	State->Cubes[Pair->IndexB].V -= InvM2 * LinearImpulse;
-    // 	State->Cubes[Pair->IndexB].W -= InvI2 * AngularI2;
-    //   }break;
     default:
       {
 	printf("ERROR::CONSTRAINT::Unknown collision type\n");
@@ -1662,7 +1722,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Cubes[0].W = glm::vec3(0.0);
       SimState->Cubes[0].Torque = glm::vec3(0.0);
       SimState->Cubes[0].Size = 1.0f;
-      SimState->Cubes[0].Mass = 1.0f;
+      SimState->Cubes[0].Mass = 7.0f;
       SimState->Cubes[0].MOI = (SimState->Cubes[0].Mass / 12.0f) *
       	(2.0f * SimState->Cubes[0].Size * SimState->Cubes[0].Size);
 
