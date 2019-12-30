@@ -279,9 +279,9 @@ struct contact_pair
   // so we know which types of objects to look at
   collision_type Type;
 
-  // NOTE(Jovan): Impulse
-  real32 DeltaLambda;
-  real32 DeltaLambdaSum;
+  // NOTE(Jovan): Delta Lambda Normal 
+  real32 DLNormal;
+  real32 DLNormalSum;
   
   // NOTE(Jovan): The intersection points
   glm::vec3 PointA;
@@ -326,12 +326,12 @@ struct sdl_state
 };
 
 // NOTE(Jovan): Return value for ODEs and physics functions
-// TODO(Jovan): Maybe use other method?
-struct phys_return
-{
-  glm::vec3 X;
-  glm::vec3 Y;
-};
+// IMPORTANT(Jovan): No need for this as we're not using X anywhere
+/* struct phys_return */
+/* { */
+/*   glm::vec3 X; */
+/*   glm::vec3 Y; */
+/* }; */
 
 #define SIM_UPDATE_AND_RENDER(name) void name(memory* Memory, sdl_input* Input, sdl_render* Render, real32 dt)
 typedef SIM_UPDATE_AND_RENDER(sim_update_and_render);
