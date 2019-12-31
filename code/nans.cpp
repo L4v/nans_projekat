@@ -1177,14 +1177,14 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
   glm::vec3 dVn = V1 + glm::cross(W1, N) - V2 - glm::cross(W2, N);
   real32 JdVn = glm::dot(dVn, N);
   // NOTE(Jovan): Baumgarte
-  real32 Beta = 0.4f;
+  real32 Beta = 0.3f;
   // NOTE(Jovan): Restitution
   real32 Cr = 0.1;
   // NOTE(Jovan): Bias
   real32 B = -Beta/dt * Depth + Cr * JdVn;
 
   // NOTE(Jovan): Friction coefficient
-  real32 Cf = 0.8;
+  real32 Cf = 0.2f;
   // NOTE(Jovan): Friction tangents
   glm::vec3 R1T1 = glm::cross(R1, T1);
   glm::vec3 R2T1 = glm::cross(R2, T1);
@@ -1199,7 +1199,7 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
   glm::vec3 dVt1 = V1 + glm::cross(W1, T1) - V2 - glm::cross(W2, T1);
   real32 JdVt1 = glm::dot(dVt1, T1);
   glm::vec3 dVt2 = V1 + glm::cross(W1, T2) - V2 - glm::cross(W2, T2);
-  real32 JdVt2 = glm::dot(dVt1, T2);
+  real32 JdVt2 = glm::dot(dVt2, T2);
     
   int32 Iter = 70;
   while(Iter--)
@@ -1225,7 +1225,7 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
       real32 OldAccumT1 = Pair->DLTangent1Sum;
       Pair->DLTangent1Sum += LambdaT1;
       // NOTE(Jovan): For clamping friction lambda to [-Cf*Lambda, Cf*Lambda]
-      real32 MaxLT1 = Cf * LambdaN;
+      real32 MaxLT1 = sqrt(2) * Cf * Pair->DLNormalSum;
       if(Pair->DLTangent1Sum < -MaxLT1)
 	{
 	  Pair->DLTangent1Sum = -MaxLT1;
@@ -1240,7 +1240,7 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
       real32 OldAccumT2 = Pair->DLTangent2Sum;
       Pair->DLTangent2Sum += LambdaT2;
       // NOTE(Jovan): For clamping friction lambda to [-Cf*Lambda, Cf*Lambda]
-      real32 MaxLT2 = Cf * LambdaN;
+      real32 MaxLT2 = sqrt(2) * Cf * Pair->DLNormalSum;
       if(Pair->DLTangent2Sum < -MaxLT2)
 	{
 	  Pair->DLTangent2Sum = -MaxLT2;
@@ -1482,6 +1482,7 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
   		  if((it->IndexA == Pair.IndexA && it->IndexB == Pair.IndexB && it->Type == Pair.Type) ||
   		     (it->IndexA == Pair.IndexB && it->IndexB == Pair.IndexA && it->Type == Pair.Type))
   		    {
+		      printf("Cache hit!\n");
   		      Exists = 1;
   		    }
   		}
@@ -2056,6 +2057,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       Model = glm::scale(Model, glm::vec3(SimState->Spheres[SphereIndex].Radius,
 					  SimState->Spheres[SphereIndex].Radius,
 					  SimState->Spheres[SphereIndex].Radius));
+      SimState->Spheres[SphereIndex].Model = Model;
       SetUniformM4(Render->Shaders[1], "Model", Model);
       glBindVertexArray(Render->VAOs[1]);
       glDrawElements(GL_TRIANGLES, Render->Num,  GL_UNSIGNED_INT, Render->Indices);

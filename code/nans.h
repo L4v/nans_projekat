@@ -230,6 +230,7 @@ struct plane
 
 struct cube
 {
+  // TODO(Jovan): Maybe better to keep inverse model matrix?
   glm::mat4 Model;
   glm::vec3 Vertices[8];
   
