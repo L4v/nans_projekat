@@ -295,8 +295,8 @@ struct contact_pair
   int32 IndexA;
   int32 IndexB;
 
-  glm::vec3 PosA;
-  glm::vec3 PosB;
+  /* glm::vec3 PosA; */
+  /* glm::vec3 PosB; */
 };
 
 struct sdl_state
@@ -306,11 +306,10 @@ struct sdl_state
   sphere Spheres[MAX_SPHERE_COUNT];
   // NOTE(Jovan): The floor is just a giant cube
   cube Floor;
-  
   sdl_camera Camera;
   uint32 CubeCount;
   uint32 SphereCount;
-  uint32 PairCount;
+  std::vector<contact_pair> Pairs;
 };
 
 // NOTE(Jovan): Return value for ODEs and physics functions

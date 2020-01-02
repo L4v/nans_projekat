@@ -1,5 +1,5 @@
 #include "nans.h"
-
+#include "utilities.cpp"
 // NOTE(Jovan): Checks if a float is NaN or inf
 internal bool32
 IsValid(real32 f)
@@ -13,38 +13,6 @@ IsValid(real32 f)
     {
       Result = 1;
     }
-  return Result;
-}
-
-internal void
-SetUniformM4(uint32 ID, char* Uniform, const glm::mat4 &Mat4)
-{
-  glUniformMatrix4fv(glGetUniformLocation(ID, Uniform), 1, GL_FALSE, &Mat4[0][0]);
-}
-
-internal void
-SetUniformV3(uint32 ID, char* Uniform, const glm::vec3 &Vec3)
-{
-  glUniform3fv(glGetUniformLocation(ID, Uniform), 1, &Vec3[0]);
-}
-
-internal void
-InitializeArena(memory_arena* Arena, memory_index Size, uint8* Base)
-{
-  Arena->Size = Size;
-  Arena->Base = Base;
-  Arena->Used = 0;
-}
-
-#define PushStruct(Arena, Type) (Type*)PushSize_(Arena, sizeof(Type))
-#define PushArray(Arena, Count, Type) (Type*)PushSize_(Arena, (Count) * sizeof(Type))
-internal void*
-PushSize_(memory_arena* Arena, memory_index Size)
-{
-  Assert((Arena->Used + Size) <= Arena->Size);
-  void* Result = Arena->Base + Arena->Used;
-  Arena->Used += Size;
-
   return Result;
 }
 
@@ -97,7 +65,7 @@ MovementFunction(glm::vec3 Velocity, glm::vec3 SummedForces, real32 Mass)
 {
   // NOTE(Jovan): Not using "x" (position) so it is omitted
   glm::vec3 Result = {};
-  Result = (real32)(1.0 / Mass) * (SummedForces - GLOBAL_FRICTION * Velocity);
+  Result = (real32)(1.0 / Mass) * (SummedForces + 9.81f * glm::vec3(0.0f, -1.0f, 0.0f) - GLOBAL_FRICTION * Velocity);
   return Result;
 }
 
@@ -984,25 +952,7 @@ CheckCollision(sdl_state* State, contact_pair* Pair, std::vector<vertex>& Simple
 internal void
 DrawTriangles(sdl_state* State, sdl_render* Render)
 {
-  // for(uint32 TriangleIndex = 0;
-  //     TriangleIndex < State->Triangle->Count;
-  //     ++TriangleIndex)
-  //   {
-  //     real32 vertices[] =
-  // 	{
-  // 	 State->Triangle->A[TriangleIndex].P.x, State->Triangle->A[TriangleIndex].P.y, State->Triangle->A[TriangleIndex].P.z,    
-  // 	 State->Triangle->B[TriangleIndex].P.x, State->Triangle->B[TriangleIndex].P.y, State->Triangle->B[TriangleIndex].P.z,
-  // 	 State->Triangle->C[TriangleIndex].P.x, State->Triangle->C[TriangleIndex].P.y, State->Triangle->C[TriangleIndex].P.z
-  // 	};
-  //     glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
-  //     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
-  //     glm::mat4 Model = glm::mat4(1.0);
-  //     SetUniformM4(Render->Shaders[2], "Model", Model);
-  //     glm::vec3 LineColor = glm::vec3(1.0, (real32)(TriangleIndex % 3)/2.0, (real32)(TriangleIndex % 4)/3.0);
-  //     SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
-  //     glBindVertexArray(Render->VAOs[3]);
-  //     glDrawArrays(GL_TRIANGLES, 0, 3);
-  //  }
+  // TODO(Jovan): Implement
 }
 
 internal void
@@ -1184,7 +1134,7 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
   real32 B = -Beta/dt * Depth + Cr * JdVn;
 
   // NOTE(Jovan): Friction coefficient
-  real32 Cf = 0.2f;
+  real32 Cf = 0.1f;
   // NOTE(Jovan): Friction tangents
   glm::vec3 R1T1 = glm::cross(R1, T1);
   glm::vec3 R2T1 = glm::cross(R2, T1);
@@ -1218,7 +1168,6 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
       // NOTE(Jovan): End of normal
       // ----------------------------
 
-      // TODO IMPORTANT(Jovan): Tangents not working?
       // NOTE(Jovan): Calculating tangent lambda
       // ---------------------------------------
       real32 LambdaT1 = (-JdVt1) * JMJt1;
@@ -1265,8 +1214,6 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
   glm::vec3 AngularI2T1 = R2T1 * Pair->DLTangent1;
   glm::vec3 AngularI1T2 = R1T2 * Pair->DLTangent2;
   glm::vec3 AngularI2T2 = R2T2 * Pair->DLTangent2;
-  // glm::vec3
-  // TODO(Jovan): Apply tangents
   // NOTE(Jovan): Applying linear and angular impulses
   switch(Pair->Type)
     {
@@ -1486,10 +1433,15 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
   		      Exists = 1;
   		    }
   		}
-  	      if(Exists == 0)
+  	      if(Exists)
   		{
-  		  Pairs.push_back(Pair);
+		  // TODO(Jovan): Warm starting?
+		  
   		}
+	      else
+		{
+  		  Pairs.push_back(Pair); 
+		}
   	    }
     	}
     }
@@ -1708,22 +1660,19 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Camera.Front = glm::vec3(0.0f, 0.0f, -1.0f);
       SimState->Camera.Right = glm::normalize(glm::cross(Up, SimState->Camera.Direction));
       SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
-
-      // NOTE(Jovan): Contact pairs init
-      //SimState->PairCount = 0;
       
       // NOTE(Jovan): Cube init
       SimState->CubeCount = 3;
       SimState->Cubes[0].Model = glm::mat4(1.0);
       UpdateVertices(SimState, 0);
-      SimState->Cubes[0].Position = glm::vec3(1.2f, -0.0f, 1.2f);//glm::vec3(2.0, 4.5f, 2.1);
+      SimState->Cubes[0].Position = glm::vec3(1.2f, 2.5f, 1.2f);//glm::vec3(2.0, 4.5f, 2.1);
       SimState->Cubes[0].V = glm::vec3(0.0);
       SimState->Cubes[0].Forces = glm::vec3(0.0);
       SimState->Cubes[0].Angles = glm::vec3(0.0);
       SimState->Cubes[0].W = glm::vec3(0.0);
       SimState->Cubes[0].Torque = glm::vec3(0.0);
       SimState->Cubes[0].Size = 1.0f;
-      SimState->Cubes[0].Mass = 7.0f;
+      SimState->Cubes[0].Mass = 1.0f;
       SimState->Cubes[0].MOI = (SimState->Cubes[0].Mass / 12.0f) *
       	(2.0f * SimState->Cubes[0].Size * SimState->Cubes[0].Size);
 
@@ -1736,7 +1685,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Cubes[1].W = glm::vec3(0.0);
       SimState->Cubes[1].Torque = glm::vec3(0.0);
       SimState->Cubes[1].Size = 1.0f;
-      SimState->Cubes[1].Mass = 10.0f;
+      SimState->Cubes[1].Mass = 1.0f;
       SimState->Cubes[1].MOI = (SimState->Cubes[1].Mass / 12.0f) *
       	(2.0f * SimState->Cubes[1].Size * SimState->Cubes[1].Size);
       
@@ -1749,7 +1698,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Cubes[2].W = glm::vec3(0.0);
       SimState->Cubes[2].Torque = glm::vec3(0.0);
       SimState->Cubes[2].Size = 1.0f;
-      SimState->Cubes[2].Mass = 10.0f;
+      SimState->Cubes[2].Mass = 1.0f;
       SimState->Cubes[2].MOI = (SimState->Cubes[2].Mass / 12.0f) *
       	(2.0f * SimState->Cubes[2].Size * SimState->Cubes[2].Size);
 
@@ -1813,7 +1762,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Floor.W = glm::vec3(0.0);
       SimState->Floor.Torque = glm::vec3(0.0);
       SimState->Floor.Size = 100.0f;
-      SimState->Floor.Mass = 1.0f;
+      SimState->Floor.Mass = 100000.0f;
       SimState->Floor.MOI = (SimState->Floor.Mass / 12.0f) *
       	(2.0f * SimState->Floor.Size * SimState->Floor.Size);
       
@@ -1846,20 +1795,20 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Physics stuff
   // --------------------------
-  std::vector<contact_pair> Pairs;
-  CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
-  CubeAddForce(SimState, 1, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
-  CubeAddForce(SimState, 2, SimState->Cubes[2].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
-  SphereAddForce(SimState, 0, SimState->Spheres[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  // std::vector<contact_pair> Pairs;
+  // CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  // CubeAddForce(SimState, 1, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  // CubeAddForce(SimState, 2, SimState->Cubes[2].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
+  // SphereAddForce(SimState, 0, SimState->Spheres[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
   //CubeAddTorque(SimState,0, glm::vec3(1.0));
+  SimState->Pairs.clear();
   IntegrateForces(SimState, dt);
-  DetectCollisions(SimState, Input, Render, dt, Pairs);
-  SolveConstraints(SimState, dt, Pairs);
+  DetectCollisions(SimState, Input, Render, dt, SimState->Pairs);
+  SolveConstraints(SimState, dt, SimState->Pairs);
   IntegrateVelocities(SimState, dt);
   // NOTE(Jovan): End physics stuff
-  // ------------------------------
+  // ------------------------------  
   
-  // TODO(Jovan): Maybe move to sdl_camera???
   glm::vec3 Front;
   Front.x = cos(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
   Front.y = sin(glm::radians(SimState->Camera.Pitch));
