@@ -65,7 +65,7 @@ MovementFunction(glm::vec3 Velocity, glm::vec3 SummedForces, real32 Mass)
 {
   // NOTE(Jovan): Not using "x" (position) so it is omitted
   glm::vec3 Result = {};
-  Result = (real32)(1.0 / Mass) * (SummedForces + 9.81f * glm::vec3(0.0f, -1.0f, 0.0f) - GLOBAL_FRICTION * Velocity);
+  Result = (real32)(1.0 / Mass) * (SummedForces + Mass * 9.81f * glm::vec3(0.0f, -1.0f, 0.0f) - GLOBAL_FRICTION * Velocity);
   return Result;
 }
 
@@ -562,7 +562,6 @@ TripleCross(glm::vec3 A, glm::vec3 B, glm::vec3 C)
 internal evolve_result
 EvolveSimplex(sdl_state* State, contact_pair* Pair, glm::vec3 PositionA, glm::vec3 PositionB, std::vector<vertex>& Simplex)
 {
-  // TODO(Jovan): Still need to resolve when objects meet at just the right spot
   evolve_result Result = StillEvolving;
   glm::vec3 Direction = glm::normalize(PositionB - PositionA);//glm::normalize(glm::vec3(1.0f));
   uint32 NoVertices = Simplex.size();
@@ -979,7 +978,6 @@ IntegrateForces(sdl_state* State, real32 dt)
       UpdateVertices(State, CubeIndex);
       CubeClearForces(State, CubeIndex);
     }
-  FloorUpdateVertices(State);
   
   for(uint32 SphereIndex = 0;
       SphereIndex < State->SphereCount;
@@ -998,6 +996,8 @@ IntegrateForces(sdl_state* State, real32 dt)
       // NOTE(Jovan): Update states and clear the forces/torques
       SphereClearForces(State, SphereIndex); 
     }
+  
+  FloorUpdateVertices(State);
 }
 
 internal void
@@ -1332,7 +1332,7 @@ DrawCollisionDepth(sdl_state* State, contact_pair* Pair, sdl_render* Render)
 internal void
 DrawMinkowski(sdl_state* State, sdl_render* Render, contact_pair* Pair)
 {
-  #if 0
+#if 0
   if(Pair->Type != CC)
     {
       printf("ERROR::DRAWMINKOWSKI::Non CC contacts not supported\n");
@@ -1374,7 +1374,7 @@ DrawMinkowski(sdl_state* State, sdl_render* Render, contact_pair* Pair)
   SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
   glBindVertexArray(Render->VAOs[3]);
   glDrawArrays(GL_LINES, 0, 36);
-  #endif
+#endif
 }
 
 internal void
@@ -1401,7 +1401,7 @@ internal void
 DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 dt,
 		 std::vector<contact_pair>& Pairs)
 {
-  #if CC_COLLISIONS
+#if CC_COLLISIONS
   // NOTE(Jovan): CC
   for(uint32 Cube1 = 0;
       Cube1 < State->CubeCount;
@@ -1592,13 +1592,6 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
 internal void
 SolveConstraints(sdl_state* State, real32 dt, std::vector<contact_pair>& Pairs)
 {
-  // for(uint32 PairIndex = 0;
-  //     PairIndex < State->PairCount;
-  //     ++PairIndex)
-  //   {
-  //     contact_pair* CurrPair = &State->Pairs[PairIndex];
-  //     Constraint(State, CurrPair, dt);
-  //   }
   for(std::vector<contact_pair>::iterator it = Pairs.begin();
       it != Pairs.end();
       ++it)
@@ -1673,8 +1666,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Cubes[0].Torque = glm::vec3(0.0);
       SimState->Cubes[0].Size = 1.0f;
       SimState->Cubes[0].Mass = 1.0f;
-      SimState->Cubes[0].MOI = (SimState->Cubes[0].Mass / 12.0f) *
-      	(2.0f * SimState->Cubes[0].Size * SimState->Cubes[0].Size);
+      SimState->Cubes[0].MOI = (SimState->Cubes[0].Mass  / 12.0f) *
+	(2.0f * pow(SimState->Cubes[0].Size, 2));
 
       SimState->Cubes[1].Model = glm::mat4(1.0);
       UpdateVertices(SimState, 1);
@@ -1715,42 +1708,6 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
       SimState->Spheres[0].Mass = 2.0f;
       SimState->Spheres[0].MOI = (2.0f / 5.0f) * SimState->Spheres[0].Mass *
       	pow(SimState->Spheres[0].Radius, 2);
-      
-      // SimState->Spheres[1].Model = glm::mat4(1.0f);
-      // SimState->Spheres[1].Position = glm::vec3(3.0f, 4.0f, 2.0f);
-      // SimState->Spheres[1].V = glm::vec3(0.0f);
-      // SimState->Spheres[1].Forces = glm::vec3(0.0f);
-      // SimState->Spheres[1].Angles = glm::vec3(0.0f);
-      // SimState->Spheres[1].W = glm::vec3(0.0f);
-      // SimState->Spheres[1].Torque = glm::vec3(0.0f);
-      // SimState->Spheres[1].Radius = 0.5f;
-      // SimState->Spheres[1].Mass = 10.0f;
-      // SimState->Spheres[1].MOI = (2.0f / 5.0f) * SimState->Spheres[1].Mass *
-      // 	pow(SimState->Spheres[1].Radius, 2);
-      
-      // SimState->Spheres[2].Model = glm::mat4(1.0f);
-      // SimState->Spheres[2].Position = glm::vec3(3.0f, 4.0f, 2.0f);
-      // SimState->Spheres[2].V = glm::vec3(0.0f);
-      // SimState->Spheres[2].Forces = glm::vec3(0.0f);
-      // SimState->Spheres[2].Angles = glm::vec3(0.0f);
-      // SimState->Spheres[2].W = glm::vec3(0.0f);
-      // SimState->Spheres[2].Torque = glm::vec3(0.0f);
-      // SimState->Spheres[2].Radius = 1.0f;
-      // SimState->Spheres[2].Mass = 10.0f;
-      // SimState->Spheres[2].MOI = (2.0f / 5.0f) * SimState->Spheres[2].Mass *
-      // 	pow(SimState->Spheres[2].Radius, 2);
-      
-      // SimState->Spheres[3].Model = glm::mat4(1.0f);
-      // SimState->Spheres[3].Position = glm::vec3(3.0f, 4.0f, 2.0f);
-      // SimState->Spheres[3].V = glm::vec3(0.0f);
-      // SimState->Spheres[3].Forces = glm::vec3(0.0f);
-      // SimState->Spheres[3].Angles = glm::vec3(0.0f);
-      // SimState->Spheres[3].W = glm::vec3(0.0f);
-      // SimState->Spheres[3].Torque = glm::vec3(0.0f);
-      // SimState->Spheres[3].Radius = 1.0f;
-      // SimState->Spheres[3].Mass = 10.0f;
-      // SimState->Spheres[3].MOI = (2.0f / 5.0f) * SimState->Spheres[3].Mass *
-      // 	pow(SimState->Spheres[3].Radius, 2);
 
       // NOTE(Jovan): Floor init
       SimState->Floor.Model = glm::mat4(1.0);
@@ -1774,14 +1731,14 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // NOTE(Jovan): Coordinate systems
   // -------------------------------
   Render->Projection = glm::perspective(glm::radians(45.0f),
-					  (real32)DEFAULT_WINDOW_WIDTH / (real32)DEFAULT_WINDOW_HEIGHT,
-					  0.1f,
-					  100.0f);
+					(real32)DEFAULT_WINDOW_WIDTH / (real32)DEFAULT_WINDOW_HEIGHT,
+					0.1f,
+					100.0f);
   glm::mat4 Model = glm::mat4(1.0f);
   Render->View = glm::mat4(1.0f);
   Render->View = glm::translate(Render->View, glm::vec3(0.0f, 0.0f, -3.0f));
   Render->View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
-		     SimState->Camera.Up);
+			     SimState->Camera.Up);
 
   // NOTE(Jovan): End coordinate systems
   // ------------------------------------
@@ -1795,12 +1752,6 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
   // NOTE(Jovan): Physics stuff
   // --------------------------
-  // std::vector<contact_pair> Pairs;
-  // CubeAddForce(SimState, 0, SimState->Cubes[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
-  // CubeAddForce(SimState, 1, SimState->Cubes[1].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
-  // CubeAddForce(SimState, 2, SimState->Cubes[2].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
-  // SphereAddForce(SimState, 0, SimState->Spheres[0].Mass * GRAVITY_ACCEL * glm::vec3(0.0, -1.0, 0.0));
-  //CubeAddTorque(SimState,0, glm::vec3(1.0));
   SimState->Pairs.clear();
   IntegrateForces(SimState, dt);
   DetectCollisions(SimState, Input, Render, dt, SimState->Pairs);
@@ -1815,7 +1766,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   Front.z = sin(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
   SimState->Camera.Front = glm::normalize(Front);
   Render->View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
-		     SimState->Camera.Up);
+			     SimState->Camera.Up);
 
 #if DRAW_WIRE
   glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
