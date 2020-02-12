@@ -65,7 +65,8 @@ MovementFunction(glm::vec3 Velocity, glm::vec3 SummedForces, real32 Mass)
 {
   // NOTE(Jovan): Not using "x" (position) so it is omitted
   glm::vec3 Result = {};
-  Result = (real32)(1.0 / Mass) * (SummedForces + Mass * 9.81f * glm::vec3(0.0f, -1.0f, 0.0f) - GLOBAL_FRICTION * Velocity);
+  Result = (real32)(1.0 / Mass) * (SummedForces + Mass * 9.81f * glm::vec3(0.0f, -1.0f, 0.0f)
+				   - GLOBAL_FRICTION * Velocity);
   return Result;
 }
 
@@ -170,20 +171,18 @@ HandleInput(sdl_state* State, sdl_input* Input, real32 dt)
   // TODO(Jovan): For debugging
   if(Input->KeyboardController.DebugReset.EndedDown)
     {
-      State->Cubes[0].Position = glm::vec3(2.0, 2.5, 2.0);
+      State->Cubes[0].Position = glm::vec3(2.0, 3.5, 2.0);
       State->Cubes[0].V = glm::vec3(0.0f);
       State->Cubes[0].W = glm::vec3(0.0f);
-      State->Cubes[0].Angles = glm::vec3(0.0f);
       
-      State->Cubes[1].Position = glm::vec3(2.0, 1.5, 2.0);
+      State->Cubes[1].Position = glm::vec3(2.0, 1.0, 2.0);
       State->Cubes[1].V = glm::vec3(0.0f);
       State->Cubes[1].W = glm::vec3(0.0f);
-      State->Cubes[1].Angles = glm::vec3(0.0f);
       
       State->Cubes[2].Position = glm::vec3(2.0, 4.0, 2.0);
       State->Cubes[2].V = glm::vec3(0.0f);
       State->Cubes[2].W = glm::vec3(0.0f);
-      State->Cubes[2].Angles = glm::vec3(0.0f);
+
     }
 }
 
