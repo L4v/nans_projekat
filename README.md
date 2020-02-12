@@ -1,5 +1,5 @@
 # 3D physics simulation engine for NANS
-This is my 3D physics simulation written in C++ (but mainly in C style) using SDL2 and OpenGL
+This is my 3D physics simulation written in C++ (but mainly in C style) using SDL2 and OpenGL.  
 I mainly tried writing everything from scratch, but resorted to using some libraries, for now.
 ![Screenshot of standing cubes](screen1.png)
 ![Video of shooting the cubes with a sphere](gifrepr1.gif)
