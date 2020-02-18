@@ -12,7 +12,6 @@
 #include <vector>
 #include <time.h>
 #include <math.h>
-
 #define internal static
 #define global_variable static
 #define local_persist static

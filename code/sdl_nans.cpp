@@ -1,15 +1,17 @@
-#include "nans.h"
-
+#define GLM_ENABLE_EXPERIMENTAL
 #define STB_IMAGE_IMPLEMENTATION
+#include "nans.cpp"
+
 #include "stb_image.h"
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <SDL2/SDL.h>
-#include <sys/mman.h>
 #include <dlfcn.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <cstdio>
 #include <unistd.h>
 #include <vector>
 
