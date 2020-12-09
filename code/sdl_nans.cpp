@@ -395,20 +395,12 @@ int main()
   // --------------------------------------
 
   // TODO(Jovan): To transient storage
-  char SphereVSSource[256 * 1024];
-  char SphereFSSource[256 * 1024];
   char CubeVSSource[256 * 1024];
   char CubeFSSource[256 * 1024];
-  char LineVSSource[256 * 1024];
-  char LineFSSource[256 * 1024];
 
   // TODO(Jovan): Rename shader loader
   LoadShader("../shaders/cube.vs", CubeVSSource, 256 * 1024);
   LoadShader("../shaders/cube.fs", CubeFSSource, 256 * 1024);
-  LoadShader("../shaders/sphere.vs", SphereVSSource, 256 * 1024);
-  LoadShader("../shaders/sphere.fs", SphereFSSource, 256 * 1024);
-  LoadShader("../shaders/line.vs", LineVSSource, 256 * 1024);
-  LoadShader("../shaders/line.fs", LineFSSource, 256 * 1024);
 
   real32 CubeVertices[] = 
   {
@@ -527,10 +519,8 @@ int main()
     }
   
   // NOTE(Jovan): Creating shaders and shader programs
-  uint32 CubeVS, CubeFS,
-    SphereVS, SphereFS,
-    LineVS, LineFS;
-  uint32 CubeShaderProgram, SphereShaderProgram, LineShaderProgram;
+  uint32 CubeVS, CubeFS;
+  uint32 CubeShaderProgram;
   
 
   // NOTE(Jovan): Cube shaders
@@ -555,73 +545,13 @@ int main()
   CheckShaderLink(CubeShaderProgram);
   glDeleteShader(CubeVS);
   glDeleteShader(CubeFS);
-
-  // NOTE(Jovan): Sphere shaders
-  SphereVS  = glCreateShader(GL_VERTEX_SHADER);
-  SphereFS = glCreateShader(GL_FRAGMENT_SHADER);
-  p = (const GLchar*)SphereVSSource;
-  glShaderSource(SphereVS, 1, &p, 0);
-  p = (const GLchar*)SphereFSSource;
-  glShaderSource(SphereFS, 1, &p, 0);
-  
-  glCompileShader(SphereVS);
-  CheckShaderCompilation(SphereVS, Vertex);
-  
-  glCompileShader(SphereFS);
-  CheckShaderCompilation(SphereFS, Fragment);
-
-
-  SphereShaderProgram = glCreateProgram();
-  glAttachShader(SphereShaderProgram, SphereVS);
-  glAttachShader(SphereShaderProgram, SphereFS);
-  glLinkProgram(SphereShaderProgram);
-  CheckShaderLink(SphereShaderProgram);
-  glDeleteShader(SphereVS);
-  glDeleteShader(SphereFS);
-
-  // NOTE(Jovan): Line shaders
-  LineVS = glCreateShader(GL_VERTEX_SHADER);
-  LineFS = glCreateShader(GL_FRAGMENT_SHADER);
-  p = (const GLchar*)LineVSSource;
-  glShaderSource(LineVS, 1, &p, 0);
-  p = (const GLchar*)LineFSSource;
-  glShaderSource(LineFS, 1, &p, 0);
-
-  glCompileShader(LineVS);
-  CheckShaderCompilation(LineVS, Vertex);
-  
-  glCompileShader(LineFS);
-  CheckShaderCompilation(LineFS, Fragment);
-
-  LineShaderProgram = glCreateProgram();
-  glAttachShader(LineShaderProgram, LineVS);
-  glAttachShader(LineShaderProgram, LineFS);
-  glLinkProgram(LineShaderProgram);
-  CheckShaderLink(LineShaderProgram);
-  glDeleteShader(LineVS);
-  glDeleteShader(LineFS);
   
   // NOTE(Jovan): VAO, EBO, VBO
   // TODO(Jovan): Gen arrays inside Render directly
-  uint32 CubeVAO, CubeVBO, CubeEBO,
-    SphereVAO, SphereVBO, SphereEBO,
-    FloorVAO, FloorVBO,
-    CoordinateVAO, CoordinateVBO;
-
-  // NOTE(Jovan): Coordinate data
-  glGenVertexArrays(1, &CoordinateVAO);
-  glBindVertexArray(CoordinateVAO);
-  glGenBuffers(1, &CoordinateVBO);
+  uint32 CubeVAO, CubeVBO,
+    SphereVAO, SphereVBO,
+    FloorVAO, FloorVBO;
   
-  // TODO(Jovan): Change to static draw
-  glBindBuffer(GL_ARRAY_BUFFER, CoordinateVAO);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(CoordinateVertices), CoordinateVertices,
-	       GL_DYNAMIC_DRAW);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(real32),
-			(void*)(0));
-  glEnableVertexAttribArray(0);
-  
-  glBindVertexArray(0);
   
   // NOTE(Jovan): Floor data
   glGenVertexArrays(1, &FloorVAO);
@@ -645,15 +575,10 @@ int main()
   glGenVertexArrays(1, &CubeVAO);
   glBindVertexArray(CubeVAO);
   glGenBuffers(1, &CubeVBO);
-  glGenBuffers(1, &CubeEBO);
 
   // TODO(Jovan): Change to static draw
   glBindBuffer(GL_ARRAY_BUFFER, CubeVBO);
   glBufferData(GL_ARRAY_BUFFER, sizeof(CubeVertices), CubeVertices,
-	       GL_DYNAMIC_DRAW);
-  
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, CubeEBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(RectIndices), RectIndices,
 	       GL_DYNAMIC_DRAW);
   
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
@@ -673,10 +598,6 @@ int main()
   glGenBuffers(1, &SphereVBO);
   glBindBuffer(GL_ARRAY_BUFFER, SphereVBO);
   glBufferData(GL_ARRAY_BUFFER, sizeof(SphereVertices), SphereVertices, GL_DYNAMIC_DRAW);
-
-  glGenBuffers(1, &SphereEBO);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, SphereEBO);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(SphereIndices), SphereIndices, GL_DYNAMIC_DRAW);
   
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5  * sizeof(real32),
 			(void*)0);
@@ -722,7 +643,6 @@ int main()
   Render.Textures[0] = CubeTexture;
   Render.VAOs[0] = CubeVAO;
 
-  Render.Shaders[1] = SphereShaderProgram;
   Render.Textures[1] = SphereTexture;
   Render.VAOs[1] = SphereVAO;
   Render.VBOs[0] = SphereVBO;

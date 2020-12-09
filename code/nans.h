@@ -142,7 +142,6 @@ struct sdl_render
   uint32 Textures[3];
   uint32 VAOs[3];
   uint32 VBOs[1];
-  uint32 EBOs[1];
   uint32* Indices;
   uint32 Num;
 

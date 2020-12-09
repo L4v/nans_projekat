@@ -1765,11 +1765,11 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   // NOTE(Jovan): Sphere drawing
   // ---------------------------
 #if DRAW_SPHERES
-  glUseProgram(Render->Shaders[1]);
+  glUseProgram(Render->Shaders[0]);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, Render->Textures[1]);
-  SetUniformM4(Render->Shaders[1], "View", Render->View);
-  SetUniformM4(Render->Shaders[1], "Projection", Render->Projection);
+  SetUniformM4(Render->Shaders[0], "View", Render->View);
+  SetUniformM4(Render->Shaders[0], "Projection", Render->Projection);
   for(uint32 SphereIndex = 0;
       SphereIndex < SimState->SphereCount;
       ++SphereIndex)
@@ -1786,7 +1786,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 					  SimState->Spheres[SphereIndex].Radius,
 					  SimState->Spheres[SphereIndex].Radius));
       SimState->Spheres[SphereIndex].Model = Model;
-      SetUniformM4(Render->Shaders[1], "Model", Model);
+      SetUniformM4(Render->Shaders[0], "Model", Model);
       glBindVertexArray(Render->VAOs[1]);
       glDrawElements(GL_TRIANGLES, Render->Num,  GL_UNSIGNED_INT, Render->Indices);
     }
