@@ -89,7 +89,7 @@ CheckShaderLink(uint32 Program)
 {
   int32 success;
   GLchar infoLog[512];
-  // NOTE(l4v): Check for program linking failure
+  // NOTE(Jovan): Check for program linking failure
   glGetProgramiv(Program, GL_LINK_STATUS, &success);
   if(!success)
     {
@@ -352,8 +352,8 @@ int main()
   SDL_Window* Window = 0;
   SDL_GLContext GLContext = 0;
   GlobalPerfCountFrequency = SDL_GetPerformanceFrequency();
-  real32 SimUpdatehz = 60.0f;
-  real32 TargetSecondsPerFrame = 1.0f / SimUpdatehz;
+  real32 SimUpdateHz = 60.0f;
+  real32 TargetSecondsPerFrame = 1.0f / SimUpdateHz;
 
 
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -410,7 +410,8 @@ int main()
   LoadShader("../shaders/line.vs", LineVSSource, 256 * 1024);
   LoadShader("../shaders/line.fs", LineFSSource, 256 * 1024);
 
-  real32 CubeVertices[] = {
+  real32 CubeVertices[] = 
+  {
 			   // X  |  Y   |  Z  | Tex coords
 			   -0.5f, -0.5f, -0.5f,  0.0f, 0.0f,
 			   0.5f, -0.5f, -0.5f,  1.0f, 0.0f,
@@ -455,12 +456,14 @@ int main()
 			   -0.5f,  0.5f, -0.5f,  0.0f, 1.0f
   };
 
-  uint32 RectIndices[] = {
+  uint32 RectIndices[] = 
+  {
 			  0, 1, 3,
 			  0, 2, 3
   };
   
-  real32 FloorVertices[] = {
+  real32 FloorVertices[] = 
+  {
 			   // X |   Y   |  Z  |  TexX | TexY
 			   50.0f, -0.5f,  50.0f,  2.0f, 0.0f, 
 			   -50.0f, -0.5f,  50.0f,  0.0f, 0.0f,
@@ -473,7 +476,8 @@ int main()
 
   // TODO(Jovan): Use vertices for one line only so different lines other
   // than the coordinate system can be created / drawn
-  real32 CoordinateVertices[] ={
+  real32 CoordinateVertices[] =
+  {
 				// X | Y   | Z   | R  | G  | B
 				0.0f, 0.0f, 0.0f,
 				1.0f, 0.0f, 0.0f
@@ -494,21 +498,21 @@ int main()
       real32 Phi = V * Pi32;
       
       for(uint32 j = 0; j <= Slices; j++)
-	{
-	  real32 U = (real32)j / (real32)Slices;
-	  real32 Theta = U * (Pi32 * 2);
+      {
+        real32 U = (real32)j / (real32)Slices;
+        real32 Theta = U * (Pi32 * 2);
 
-	  real32 x = cos(Theta) * sin(Phi);
-	  real32 y = cos(Phi);
-	  real32 z = sin(Theta) * sin(Phi);
+        real32 x = cos(Theta) * sin(Phi);
+        real32 y = cos(Phi);
+        real32 z = sin(Theta) * sin(Phi);
 
-	  SphereVertices[Index++] = x;
-	  SphereVertices[Index++] = y;
-	  SphereVertices[Index++] = z;
-	  // // TODO(Jovan): Texture sphere
-	  SphereVertices[Index++] = (real32)j / (real32)Slices;
-	  SphereVertices[Index++] = (real32)i / (real32)Stacks;
-	}
+        SphereVertices[Index++] = x;
+        SphereVertices[Index++] = y;
+        SphereVertices[Index++] = z;
+        // // TODO(Jovan): Texture sphere
+        SphereVertices[Index++] = (real32)j / (real32)Slices;
+        SphereVertices[Index++] = (real32)i / (real32)Stacks;
+      }
     }
   Index = 0;
   for(uint32 i = 0; i < Slices * Stacks + Slices; i++)
@@ -727,9 +731,6 @@ int main()
 
   Render.Textures[2] = FloorTexture;
   Render.VAOs[2] = FloorVAO;
-
-  Render.Shaders[2] = LineShaderProgram;
-  Render.VAOs[3] = CoordinateVAO;
   
   while(Running)
     {
@@ -800,13 +801,6 @@ int main()
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
       Sim.UpdateAndRender(&SimMemory, NewInput, &Render, dt);
       glBindVertexArray(0);
-
-      // NOTE(Jovan): SPHERE
-      // -------------------
-
-      // NOTE(Jovan): END SPHERE
-      // -----------------------
-
       
       // NOTE(Jovan): Swap buffers
       SDL_GL_SwapWindow(Window);

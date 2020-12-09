@@ -1302,81 +1302,6 @@ Constraint(sdl_state* State, contact_pair* Pair, real32 dt)
 }
 
 internal void
-DrawLineSegment(sdl_render* Render, glm::vec3 A, glm::vec3 B)
-{
-  glUseProgram(Render->Shaders[2]);
-  SetUniformM4(Render->Shaders[2], "View", Render->View);
-  SetUniformM4(Render->Shaders[2], "Projection", Render->Projection);
-  glm::vec3 LineColor = glm::vec3(1.0, 0.0, 0.0);
-  real32 Vertices[] =
-    {
-     A.x, A.y, A.z,
-     B.x, B.y, B.z 
-    };
-  glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(Vertices), Vertices, GL_DYNAMIC_DRAW);
-  glm::mat4 Model = glm::mat4(1.0);
-  SetUniformM4(Render->Shaders[2], "Model", Model);
-  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
-  glBindVertexArray(Render->VAOs[3]);
-  glDrawArrays(GL_LINE_STRIP, 0, 2);
-}
-
-internal void
-DrawCollisionDepth(sdl_state* State, contact_pair* Pair, sdl_render* Render)
-{
-  DrawLineSegment(Render, Pair->PointA, Pair->PointB);
-}
-
-internal void
-DrawMinkowski(sdl_state* State, sdl_render* Render, contact_pair* Pair)
-{
-#if 0
-  if(Pair->Type != CC)
-    {
-      printf("ERROR::DRAWMINKOWSKI::Non CC contacts not supported\n");
-      return;
-    }
-  std::vector<vertex> Simplex;
-  vertex v1 = CalculateSupport(State, Pair, glm::vec3(1.0, 1.0, 1.0), Simplex);
-  vertex v2 = CalculateSupport(State, Pair, glm::vec3(-1.0, 1.0, 1.0), Simplex);
-  vertex v3 = CalculateSupport(State, Pair, glm::vec3(1.0, -1.0, 1.0), Simplex);
-  vertex v4 = CalculateSupport(State, Pair, glm::vec3(-1.0, -1.0, 1.0), Simplex);
-  vertex v5 = CalculateSupport(State, Pair, glm::vec3(1.0, 1.0, -1.0), Simplex);
-  vertex v6 = CalculateSupport(State, Pair, glm::vec3(-1.0, 1.0, -1.0), Simplex);
-  vertex v7 = CalculateSupport(State, Pair, glm::vec3(1.0, -1.0, -1.0), Simplex);
-  vertex v8 = CalculateSupport(State, Pair, glm::vec3(-1.0, -1.0, -1.0), Simplex);
-  real32 MinkowskiVertices[] = {
-				v1.P.x, v1.P.y, v1.P.z,
-				v2.P.x, v2.P.y, v2.P.z,
-				
-				v1.P.x, v1.P.y, v1.P.z,
-				v3.P.x, v3.P.y, v3.P.z,
-
-				v3.P.x, v3.P.y, v3.P.z,
-				v4.P.x, v4.P.y, v4.P.z,
-				
-				v5.P.x, v5.P.y, v5.P.z,
-				v6.P.x, v6.P.y, v6.P.z,
-				
-				v5.P.x, v5.P.y, v5.P.z,
-				v7.P.x, v7.P.y, v7.P.z,
-				
-				v7.P.x, v7.P.y, v7.P.z,
-				v8.P.x, v8.P.y, v8.P.z,
-  };
-  glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(MinkowskiVertices), MinkowskiVertices, GL_DYNAMIC_DRAW);
-  glm::mat4 Model = glm::mat4(1.0);
-  SetUniformM4(Render->Shaders[2], "Model", Model);
-  glm::vec3 LineColor = glm::vec3(1.0f);
-  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
-  glBindVertexArray(Render->VAOs[3]);
-  glDrawArrays(GL_LINES, 0, 36);
-#endif
-}
-
-internal void
 IntegrateVelocities(sdl_state* State, real32 dt)
 {
   for(uint32 CubeIndex = 0;
@@ -1419,7 +1344,6 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
   	  CollisionHappened = CheckCollision(State, &Pair, Simplex);
   	  if(CollisionHappened)
   	    {
-  	      DrawCollisionDepth(State, &Pair, Render);
   	      bool32 Exists = 0;
   	      for(std::vector<contact_pair>::iterator it = Pairs.begin();
   		  it != Pairs.end();
@@ -1460,7 +1384,6 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
       CollisionHappened = CheckCollision(State, &Pair, Simplex);
       if(CollisionHappened)
 	{
-	  DrawCollisionDepth(State, &Pair, Render);
 	  bool32 Exists = 0;
 	  for(std::vector<contact_pair>::iterator it = Pairs.begin();
 	      it != Pairs.end();
@@ -1527,7 +1450,6 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
 	  CollisionHappened = CheckCollision(State, &Pair, Simplex);
 	  if(CollisionHappened)
 	    {
-	      DrawCollisionDepth(State, &Pair, Render);
 	      bool32 Exists = 0;
 	      for(std::vector<contact_pair>::iterator it = Pairs.begin();
 		  it != Pairs.end();
@@ -1566,7 +1488,6 @@ DetectCollisions(sdl_state* State, sdl_input* Input, sdl_render* Render, real32 
   	  CollisionHappened = CheckCollision(State, &Pair, Simplex);
   	  if(CollisionHappened)
   	    {
-  	      DrawCollisionDepth(State, &Pair, Render);
   	      bool32 Exists = 0;
   	      for(std::vector<contact_pair>::iterator it = Pairs.begin();
   		  it != Pairs.end();
@@ -1772,86 +1693,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 #else
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 #endif
-  
-  // NOTE(Jovan): Coordinate drawing
-  // -------------------------------
-  glUseProgram(Render->Shaders[2]);
-  SetUniformM4(Render->Shaders[2], "View", Render->View);
-  SetUniformM4(Render->Shaders[2], "Projection", Render->Projection);
-  real32 LineLength = 100.0f;
-  glm::vec3 LineColor = glm::vec3(0.0);
 
-  // NOTE(Jovan): Drawing polytope
-  // ----------------
 
-  // TODO(Jovan): Fix 
-#if DRAW_EPA
-  DrawTriangles(SimState, Render);
-
-  if(Closest != -1)
-    {
-      real32 X = -SimState->Triangle->N[Closest].x;
-      real32 Y = -SimState->Triangle->N[Closest].y;
-      real32 Z = -SimState->Triangle->N[Closest].z;
-      real32 vertices[] =
-	{
-	 0, 0, 0,
-	 X, Y, Z
-	};
-      glBindBuffer(GL_ARRAY_BUFFER, Render->VAOs[3]);
-      glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
-      Model = glm::mat4(1.0);
-      LineColor = glm::vec3(1.0f, 0.0f, 1.0f);
-      SetUniformM4(Render->Shaders[2], "Model", Model);
-      SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
-      glBindVertexArray(Render->VAOs[3]);
-      glDrawArrays(GL_LINE_STRIP, 0, 2);
-    }
-  // NOTE(Jovan): End test
-  // ---------------------
-#endif
-#if DRAW_COORDINATES
-  for(uint32 CubeIndex = 0;
-      CubeIndex < SimState->CubeCount;
-      ++CubeIndex)
-    {
-      for(uint32 i = 0;
-	  i < 8;
-	  ++i)
-	{
-	  
-	  // NOTE(Jovan): X
-	  Model = glm::mat4(1.0);
-	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
-	  Model = glm::scale(Model, glm::vec3(LineLength));
-	  SetUniformM4(Render->Shaders[2], "Model", Model);
-	  LineColor = glm::vec3(1.0f, 0.0f, 0.0f);
-	  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
-	  glBindVertexArray(Render->VAOs[3]);
-	  glDrawArrays(GL_LINES, 0, 6);
-	  // NOTE(Jovan): Y
-	  Model = glm::mat4(1.0);
-	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
-	  Model = glm::rotate(Model, glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-	  Model = glm::scale(Model, glm::vec3(LineLength));
-	  SetUniformM4(Render->Shaders[2], "Model", Model);
-	  LineColor = glm::vec3(0.0f, 1.0f, 0.0f);
-	  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
-	  glBindVertexArray(Render->VAOs[3]);
-	  glDrawArrays(GL_LINES, 0, 6);
-	  // NOTE(Jovan): Z
-	  Model = glm::mat4(1.0);
-	  Model = glm::translate(Model, SimState->Cubes[CubeIndex].Vertices[i]);
-	  Model = glm::rotate(Model, glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-	  Model = glm::scale(Model, glm::vec3(LineLength));
-	  SetUniformM4(Render->Shaders[2], "Model", Model);
-	  LineColor = glm::vec3(0.0f, 0.0f, 1.0f);
-	  SetUniformV3(Render->Shaders[2], "LineColor", LineColor);
-	  glBindVertexArray(Render->VAOs[3]);
-	  glDrawArrays(GL_LINES, 0, 6);
-	}
-    }
-#endif
   glBindVertexArray(0);
 
 #if DRAW_FLOOR
@@ -1884,20 +1727,6 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   SetUniformM4(Render->Shaders[0], "Projection", Render->Projection);
 #endif 
 
-  // NOTE(Jovan): Minkowski sum drawing
-  // ---------------------------------
-
-  // TODO(Jovan): Fix this
-#if DRAW_MINKOWSKI
-  if(Pairs.size() > 0)
-    {
-      DrawMinkowski(SimState, Render, &Pairs[0]);
-    }
-#endif
-  
-  // NOTE(Jovan): End Minkowski sum drawing
-  // --------------------------------------
-  
   // NOTE(Jovan): Cube drawing
   // -------------------------
   glUseProgram(Render->Shaders[0]);
@@ -1964,27 +1793,4 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
   glBindVertexArray(0);
 #endif
       
-  // NOTE(Jovan): End sphere drawing
-  // -------------------------------
-
-  // NOTE(Jovan): Logging
-  // --------------------
-#if LOGGING
-  // TODO(Jovan): Make better logging
-  // printf("Floor coords:");
-  //PrintVector(SimState->Floor.Position);
-  //  printf("Collision: %d\n", CollisionHappened);
-  //printf("Triangles: %d\n", SimState->Triangle->Count);
-  //  printf("Normals:\n");
-  //PrintVector(SimState->Triangle->N[0]);
-  //printf("Cube 0 position:");
-  //PrintVector(SimState->Cubes[0].Position);
-#endif
-  // NOTE(Jovan): End logging
-  // ------------------------
-  // ClearVertices(SimState->Simplex);
-  // ClearTriangles(SimState->Triangle);
-  // ClearEdges(SimState->Edge);
-  // NOTE(Jovan): Clear accumulated impulse
-  //SimState->AccumI = 0.0f;
 }

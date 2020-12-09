@@ -138,9 +138,9 @@ struct sdl_input
 
 struct sdl_render
 {
-  uint32 Shaders[3];
+  uint32 Shaders[2];
   uint32 Textures[3];
-  uint32 VAOs[4];
+  uint32 VAOs[3];
   uint32 VBOs[1];
   uint32 EBOs[1];
   uint32* Indices;
