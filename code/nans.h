@@ -141,9 +141,11 @@ struct sdl_render
   uint32 Shaders[2];
   uint32 Textures[3];
   uint32 VAOs[3];
-  uint32 VBOs[1];
+  uint32 VBOs[2];
   uint32* Indices;
+  uint32* ModelIndices;
   uint32 Num;
+  uint32 ModelNum;
 
   glm::mat4 View;
   glm::mat4 Projection;

@@ -1792,5 +1792,15 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     }
   glBindVertexArray(0);
 #endif
-      
+
+  glUseProgram(Render->Shaders[1]);
+  SetUniformM4(Render->Shaders[1], "View", Render->View);
+  SetUniformM4(Render->Shaders[1], "Projection", Render->Projection);
+  Model = glm::mat4(1.0);
+  Model = glm::translate(Model, glm::vec3(0.0f, 4.0f, 0.0f));
+  Model = glm::scale(Model, glm::vec3(0.0025f));
+  SetUniformM4(Render->Shaders[1], "Model", Model);
+  glBindVertexArray(Render->VAOs[2]);
+  glDrawElements(GL_TRIANGLES, Render->ModelNum,  GL_UNSIGNED_INT, Render->ModelIndices);
+  glBindVertexArray(0);
 }

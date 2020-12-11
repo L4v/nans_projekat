@@ -14,6 +14,9 @@
 #include <cstdio>
 #include <unistd.h>
 #include <vector>
+#include <assimp/cimport.h>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 
 #include "sdl_nans.h"
 
@@ -328,6 +331,13 @@ LoadShader( const char *file_name, char *shader_str, int max_len ) {
   fclose( file );
 }
 
+// TODO(Jovan): Optimize and use EBO?
+internal void
+LoadModel(const char* ModelFilepath, uint32& ModelVAO, uint32& ModelVBO)
+{
+  // TODO(Jovan): Implement
+}
+
 int main()
 {
 
@@ -397,10 +407,14 @@ int main()
   // TODO(Jovan): To transient storage
   char CubeVSSource[256 * 1024];
   char CubeFSSource[256 * 1024];
+  char ModelVSSource[256 * 1024];
+  char ModelFSSource[256 * 1024];
 
   // TODO(Jovan): Rename shader loader
   LoadShader("../shaders/cube.vs", CubeVSSource, 256 * 1024);
   LoadShader("../shaders/cube.fs", CubeFSSource, 256 * 1024);
+  LoadShader("../shaders/model.vs", ModelVSSource, 256 * 1024);
+  LoadShader("../shaders/model.fs", ModelFSSource, 256 * 1024);
 
   real32 CubeVertices[] = 
   {
@@ -521,6 +535,9 @@ int main()
   // NOTE(Jovan): Creating shaders and shader programs
   uint32 CubeVS, CubeFS;
   uint32 CubeShaderProgram;
+
+  uint32 ModelVS, ModelFS;
+  uint32 ModelShaderProgram;
   
 
   // NOTE(Jovan): Cube shaders
@@ -545,6 +562,25 @@ int main()
   CheckShaderLink(CubeShaderProgram);
   glDeleteShader(CubeVS);
   glDeleteShader(CubeFS);
+
+  ModelVS = glCreateShader(GL_VERTEX_SHADER);
+  ModelFS = glCreateShader(GL_FRAGMENT_SHADER);
+  p = (const GLchar*)ModelVSSource;
+  glShaderSource(ModelVS, 1, &p, 0);
+  p = (const GLchar*)ModelFSSource;
+  glShaderSource(ModelFS, 1, &p, 0);
+  glCompileShader(ModelVS);
+  CheckShaderCompilation(ModelVS, Vertex);
+  glCompileShader(ModelFS);
+  CheckShaderCompilation(ModelFS, Fragment);
+
+  ModelShaderProgram = glCreateProgram();
+  glAttachShader(ModelShaderProgram, ModelVS);
+  glAttachShader(ModelShaderProgram, ModelFS);
+  glLinkProgram(ModelShaderProgram);
+  CheckShaderLink(ModelShaderProgram);
+  glDeleteShader(ModelVS);
+  glDeleteShader(ModelFS);
   
   // NOTE(Jovan): VAO, EBO, VBO
   // TODO(Jovan): Gen arrays inside Render directly
@@ -605,8 +641,7 @@ int main()
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
   			(void*) (3 * sizeof(real32)));
    glEnableVertexAttribArray(1);
-			
-  
+
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
   glBindVertexArray(0);
   // NOTE(Jovan): Textures
@@ -651,6 +686,70 @@ int main()
 
   Render.Textures[2] = FloorTexture;
   Render.VAOs[2] = FloorVAO;
+
+  // NOTE(Jovan): Assimp model loading
+  // TODO(Jovan): Move to proper location
+  // -------------------------------------
+  const char* ModelFilepath = "../res/model/amongus.obj";
+  const struct aiScene* Scene = aiImportFile(ModelFilepath, aiProcess_Triangulate | aiProcess_FlipUVs);
+  if(!Scene || Scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !Scene->mRootNode)
+  {
+    printf("ERROR::ASSIMP MODEL LOADING FAILED\n%s", aiGetErrorString());
+  }
+  printf("Loaded model with %d meshes\n", Scene->mNumMeshes);
+  const struct aiMesh* Mesh = Scene->mMeshes[0];
+  int32 NumMeshVertices = Mesh->mNumVertices;
+  printf("Mesh with %d vertices\n", NumMeshVertices);
+  real32 MeshVertices[NumMeshVertices * 3];
+  for(int VertexIndex = 0;
+      VertexIndex < NumMeshVertices;
+      ++VertexIndex)
+  {
+    MeshVertices[VertexIndex] = Mesh->mVertices[VertexIndex].x;
+    MeshVertices[VertexIndex + 1] = Mesh->mVertices[VertexIndex].y;
+    MeshVertices[VertexIndex + 2] = Mesh->mVertices[VertexIndex].z;
+  }
+  printf("Mesh with %d faces\n", Mesh->mNumFaces);
+  int32 NumMeshFaces = Mesh->mNumFaces;
+
+  // NOTE(Jovan): x3 because faces are triangles due to aiProcess_Triangulate flag
+  uint32 MeshFaceIndices[NumMeshFaces * 3];
+  uint32 IndexCount = 0;
+  for(uint32 FaceIndex = 0;
+      FaceIndex < Mesh->mNumFaces;
+      ++FaceIndex)
+  {
+    MeshFaceIndices[IndexCount++] = Mesh->mFaces[FaceIndex].mIndices[0];
+    MeshFaceIndices[IndexCount++] = Mesh->mFaces[FaceIndex].mIndices[1];
+    MeshFaceIndices[IndexCount++] = Mesh->mFaces[FaceIndex].mIndices[2];
+  }
+  
+
+  uint32 ModelVAO, ModelVBO;
+
+  glGenVertexArrays(1, &ModelVAO);
+  glBindVertexArray(ModelVAO);
+  glGenBuffers(1, &ModelVBO);
+  // ----
+  
+  glBindBuffer(GL_ARRAY_BUFFER, ModelVBO);
+  glBufferData(GL_ARRAY_BUFFER, 3 * NumMeshVertices * sizeof(real32), Mesh->mVertices, GL_DYNAMIC_DRAW);
+  
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3  * sizeof(real32),
+			(void*)0);
+  glEnableVertexAttribArray(0);
+   
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+  glBindVertexArray(0);
+  aiReleaseImport(Scene);
+  //---
+
+  Render.ModelIndices = MeshFaceIndices;
+  Render.VAOs[2] = ModelVAO;
+  Render.VBOs[1] = ModelVBO;
+  Render.ModelNum = ArrayCount(MeshFaceIndices);
+  Render.Shaders[1] = ModelShaderProgram;
+  // NOTE(Jovan): End assimp model loading
   
   while(Running)
     {
@@ -740,6 +839,5 @@ int main()
       NewInput = OldInput;
       OldInput = Temp;
     }
-  
   return 0;
 }
