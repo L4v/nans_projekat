@@ -1,7 +1,7 @@
 #include "nans.h"
 #include "utilities.cpp"
 // NOTE(Jovan): Checks if a float is NaN or inf
-internal bool32
+static bool32
 IsValid(real32 f)
 {
     bool32 Result = 0;
@@ -16,7 +16,7 @@ IsValid(real32 f)
     return Result;
 }
 
-internal void
+static void
 UpdateCamera(sdl_state *State, sdl_input *Input)
 {
     State->Camera.Yaw += Input->MouseController.XRel * Input->MouseController.Sensitivity;
@@ -37,7 +37,7 @@ UpdateCamera(sdl_state *State, sdl_input *Input)
     }
 }
 
-internal glm::vec3
+static glm::vec3
 Euler(glm::vec3 (*F)(glm::vec3, glm::vec3, real32), real32 dt,
       glm::vec3 Y0, glm::vec3 SummedForce, real32 Mass)
 {
@@ -47,7 +47,7 @@ Euler(glm::vec3 (*F)(glm::vec3, glm::vec3, real32), real32 dt,
     return Result;
 }
 
-internal glm::vec3
+static glm::vec3
 RK4(glm::vec3 (*F)(glm::vec3, glm::vec3, real32), real32 dt,
     glm::vec3 Y0, glm::vec3 SummedForce, real32 Mass)
 {
@@ -60,7 +60,7 @@ RK4(glm::vec3 (*F)(glm::vec3, glm::vec3, real32), real32 dt,
     return Result;
 }
 
-internal glm::vec3
+static glm::vec3
 MovementFunction(glm::vec3 Velocity, glm::vec3 SummedForces, real32 Mass)
 {
     // NOTE(Jovan): Not using "x" (position) so it is omitted
@@ -69,7 +69,7 @@ MovementFunction(glm::vec3 Velocity, glm::vec3 SummedForces, real32 Mass)
     return Result;
 }
 
-internal glm::vec3
+static glm::vec3
 RotationFunction(glm::vec3 RotVelocity, glm::vec3 SummedTorque, real32 MomentOfInertia)
 {
     glm::vec3 Result = {};
@@ -77,39 +77,39 @@ RotationFunction(glm::vec3 RotVelocity, glm::vec3 SummedTorque, real32 MomentOfI
     return Result;
 }
 
-internal void
+static void
 CubeAddForce(sdl_state *State, int32 CubeIndex, glm::vec3 Force)
 {
     State->Cubes[CubeIndex].Forces += Force;
 };
 
-internal void
+static void
 CubeAddTorque(sdl_state *State, int32 CubeIndex, glm::vec3 Torque)
 {
     State->Cubes[CubeIndex].Torque += Torque;
 };
 
-internal void
+static void
 CubeClearForces(sdl_state *State, int32 CubeIndex)
 {
     State->Cubes[CubeIndex].Forces = glm::vec3(0.0);
     State->Cubes[CubeIndex].Torque = glm::vec3(0.0);
 };
 
-internal void
+static void
 SphereAddForce(sdl_state *State, int32 SphereIndex, glm::vec3 Force)
 {
     State->Spheres[SphereIndex].Forces += Force;
 }
 
-internal void
+static void
 SphereClearForces(sdl_state *State, int32 SphereIndex)
 {
     State->Spheres[SphereIndex].Forces = glm::vec3(0.0);
     State->Spheres[SphereIndex].Torque = glm::vec3(0.0);
 }
 
-internal void
+static void
 ShootSphere(sdl_state *State)
 {
     SphereClearForces(State, 0);
@@ -119,7 +119,7 @@ ShootSphere(sdl_state *State)
     SphereAddForce(State, 0, SHOOT_FORCE * State->Camera.Front);
 }
 
-internal void
+static void
 HandleInput(sdl_state *State, sdl_input *Input, real32 dt)
 {
 
@@ -184,7 +184,7 @@ HandleInput(sdl_state *State, sdl_input *Input, real32 dt)
     }
 }
 
-internal void
+static void
 RemoveVertex(simplex *Simplex, uint32 VertexIndex)
 {
     Assert(VertexIndex < Simplex->Count);
@@ -196,20 +196,20 @@ RemoveVertex(simplex *Simplex, uint32 VertexIndex)
     }
     Simplex->Count--;
 }
-internal void
+static void
 PushVertex(simplex *Simplex, vertex V)
 {
     Simplex->Vertices[Simplex->Count] = V;
     Simplex->Count++;
 }
 
-internal inline void
+static inline void
 ClearVertices(simplex *Simplex)
 {
     Simplex->Count = 0;
 }
 
-internal void
+static void
 RemoveEdge(std::vector<edge> &Edge, uint32 EdgeIndex) //edge* Edge, uint32 EdgeIndex)
 {
     // Assert(EdgeIndex < Edge->Count);
@@ -224,7 +224,7 @@ RemoveEdge(std::vector<edge> &Edge, uint32 EdgeIndex) //edge* Edge, uint32 EdgeI
     Edge.erase(Edge.begin() + EdgeIndex);
 }
 
-internal void
+static void
 PushEdge(std::vector<edge> &Edge, vertex A, vertex B) //edge* Edge, vertex A, vertex B)
 {
     // // NOTE(Jovan): Checks whether an edge of opposite
@@ -260,13 +260,13 @@ PushEdge(std::vector<edge> &Edge, vertex A, vertex B) //edge* Edge, vertex A, ve
     Edge.push_back(Tmp);
 }
 
-internal void
+static void
 ClearEdges(edge *Edge)
 {
     Edge->Count = 0;
 }
 
-internal void
+static void
 RemoveTriangle(std::vector<triangle> &Triangle, uint32 TriangleIndex) //triangle* Triangle, uint32 TriangleIndex)
 {
     // Assert(TriangleIndex < Triangle->Count);
@@ -284,7 +284,7 @@ RemoveTriangle(std::vector<triangle> &Triangle, uint32 TriangleIndex) //triangle
 }
 
 // NOTE(Jovan): Push triangle using vertices
-internal void
+static void
 PushTriangle(std::vector<triangle> &Triangle, vertex A, vertex B, vertex C) //triangle* Triangle, vertex A, vertex B, vertex C)
 {
     // Triangle->A[Triangle->Count] = A;
@@ -316,7 +316,7 @@ PushTriangle(std::vector<triangle> &Triangle, vertex A, vertex B, vertex C) //tr
     Triangle.push_back(Tmp);
 }
 
-internal inline void
+static inline void
 ClearTriangles(triangle *Triangle)
 {
     Triangle->Count = 0;
@@ -324,7 +324,7 @@ ClearTriangles(triangle *Triangle)
 
 // NOTE(Jovan): Checks whether or not a contact pair already
 // exists in the list
-internal bool32
+static bool32
 PairExists(sdl_state *State, contact_pair *Pair)
 {
     bool32 Result = 0;
@@ -346,7 +346,7 @@ PairExists(sdl_state *State, contact_pair *Pair)
 
 // NOTE(Jovan): Pushes a contact pair into the list if it
 // doesn't exist already
-internal void
+static void
 PushPair(sdl_state *State, contact_pair Pair)
 {
     // if(PairExists(State, &Pair))
@@ -358,7 +358,7 @@ PushPair(sdl_state *State, contact_pair Pair)
     // State->PairCount++;
 }
 
-internal void
+static void
 RemovePair(sdl_state *State, int32 Index)
 {
     // for(uint32 PairIndex = Index;
@@ -371,7 +371,7 @@ RemovePair(sdl_state *State, int32 Index)
     // State->PairCount--;
 }
 
-internal void
+static void
 FloorUpdateVertices(sdl_state *State)
 {
     glm::mat4 Model = State->Floor.Model;
@@ -386,7 +386,7 @@ FloorUpdateVertices(sdl_state *State)
     State->Floor.Vertices[7] = glm::vec3(Model * glm::vec4(-0.5, -0.5, -0.5, 1.0));
 }
 
-internal void
+static void
 UpdateVertices(sdl_state *State, int32 CubeIndex)
 {
     glm::mat4 Model = State->Cubes[CubeIndex].Model;
@@ -401,7 +401,7 @@ UpdateVertices(sdl_state *State, int32 CubeIndex)
     State->Cubes[CubeIndex].Vertices[7] = glm::vec3(Model * glm::vec4(-0.5, -0.5, -0.5, 1.0));
 }
 
-internal glm::vec3
+static glm::vec3
 GetCubeSupport(sdl_state *State, int32 CubeIndex, glm::vec3 Direction)
 {
     real32 MaxDistance = -FLT_MAX;
@@ -424,7 +424,7 @@ GetCubeSupport(sdl_state *State, int32 CubeIndex, glm::vec3 Direction)
     return Result;
 }
 
-internal glm::vec3
+static glm::vec3
 GetSphereSupport(sdl_state *State, int32 SphereIndex, glm::vec3 Direction)
 {
     sphere *Sphere = &State->Spheres[SphereIndex];
@@ -432,7 +432,7 @@ GetSphereSupport(sdl_state *State, int32 SphereIndex, glm::vec3 Direction)
     return Result;
 }
 
-internal glm::vec3
+static glm::vec3
 GetFloorSupport(sdl_state *State, glm::vec3 Direction)
 {
     real32 MaxDistance = -FLT_MAX;
@@ -455,7 +455,7 @@ GetFloorSupport(sdl_state *State, glm::vec3 Direction)
     return Result;
 }
 
-internal vertex
+static vertex
 CalculateSupport(sdl_state *State, contact_pair *Pair, glm::vec3 Direction, std::vector<vertex> &Simplex)
 {
     vertex Result = {};
@@ -513,7 +513,7 @@ CalculateSupport(sdl_state *State, contact_pair *Pair, glm::vec3 Direction, std:
     return Result;
 }
 
-internal bool32
+static bool32
 AddSupport(sdl_state *State, contact_pair *Pair, glm::vec3 Direction, std::vector<vertex> &Simplex)
 {
     bool32 Result = 0;
@@ -531,7 +531,7 @@ AddSupport(sdl_state *State, contact_pair *Pair, glm::vec3 Direction, std::vecto
     return Result;
 }
 
-internal glm::vec3
+static glm::vec3
 ClosestPointOnLine(glm::vec3 A, glm::vec3 B, glm::vec3 Target,
                    real32 *U, real32 *V)
 {
@@ -556,14 +556,14 @@ ClosestPointOnLine(glm::vec3 A, glm::vec3 B, glm::vec3 Target,
     return Result;
 }
 
-internal glm::vec3
+static glm::vec3
 TripleCross(glm::vec3 A, glm::vec3 B, glm::vec3 C)
 {
     // NOTE(Jovan): (A x B) x C = B * (C . A) - A * (C . B)
     return (B * glm::dot(C, A)) - (A * glm::dot(C, B));
 }
 
-internal evolve_result
+static evolve_result
 EvolveSimplex(sdl_state *State, contact_pair *Pair, glm::vec3 PositionA, glm::vec3 PositionB, std::vector<vertex> &Simplex)
 {
     evolve_result Result = StillEvolving;
@@ -763,7 +763,7 @@ EvolveSimplex(sdl_state *State, contact_pair *Pair, glm::vec3 PositionA, glm::ve
     return Result;
 }
 
-internal void
+static void
 Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
             real32 *U, real32 *V, real32 *W)
 {
@@ -779,7 +779,7 @@ Barycentric(glm::vec3 P, glm::vec3 A, glm::vec3 B, glm::vec3 C,
     *U = 1.0f - *V - *W;
 }
 
-internal bool32
+static bool32
 ResolveCollision(sdl_state *State, contact_pair *Pair, std::vector<vertex> &Simplex)
 {
     int32 CurrIter = 0;
@@ -898,7 +898,7 @@ ResolveCollision(sdl_state *State, contact_pair *Pair, std::vector<vertex> &Simp
     return 0;
 }
 
-internal bool32
+static bool32
 CheckCollision(sdl_state *State, contact_pair *Pair, std::vector<vertex> &Simplex)
 {
     bool32 Result = 0;
@@ -960,13 +960,13 @@ CheckCollision(sdl_state *State, contact_pair *Pair, std::vector<vertex> &Simple
     return Result;
 }
 
-internal void
+static void
 DrawTriangles(sdl_state *State, sdl_render *Render)
 {
     // TODO(Jovan): Implement
 }
 
-internal void
+static void
 IntegrateForces(sdl_state *State, real32 dt)
 {
     glm::vec3 Y0 = {};
@@ -1012,7 +1012,7 @@ IntegrateForces(sdl_state *State, real32 dt)
     FloorUpdateVertices(State);
 }
 
-internal void
+static void
 Constraint(sdl_state *State, contact_pair *Pair, real32 dt)
 {
     glm::vec3 N = glm::normalize(Pair->N);
@@ -1323,7 +1323,7 @@ Constraint(sdl_state *State, contact_pair *Pair, real32 dt)
     }
 }
 
-internal void
+static void
 IntegrateVelocities(sdl_state *State, real32 dt)
 {
     for (uint32 CubeIndex = 0;
@@ -1343,7 +1343,7 @@ IntegrateVelocities(sdl_state *State, real32 dt)
     }
 }
 
-internal void
+static void
 DetectCollisions(sdl_state *State, sdl_input *Input, sdl_render *Render, real32 dt,
                  std::vector<contact_pair> &Pairs)
 {
@@ -1530,7 +1530,7 @@ DetectCollisions(sdl_state *State, sdl_input *Input, sdl_render *Render, real32 
 #endif
 }
 
-internal void
+static void
 SolveConstraints(sdl_state *State, real32 dt, std::vector<contact_pair> &Pairs)
 {
     for (std::vector<contact_pair>::iterator it = Pairs.begin();
@@ -1635,8 +1635,6 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
         SimState->Cubes[2].Mass = 1.0f;
         SimState->Cubes[2].MOI = (SimState->Cubes[2].Mass / 12.0f) *
                                  (2.0f * SimState->Cubes[2].Size * SimState->Cubes[2].Size);
-
-        // NOTE(Jovan): Cube bounding box for
 
         // NOTE(Jovan): Sphere init
         SimState->SphereCount = 1;
@@ -1824,7 +1822,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     SetUniformM4(Render->Shaders[0], "View", Render->View);
     SetUniformM4(Render->Shaders[0], "Projection", Render->Projection);
     Model = glm::mat4(1.0);
-    Model = glm::translate(Model, glm::vec3(0.0f, 0.0f, 0.0f));
+    Model = glm::translate(Model, glm::vec3(0.0f));
     Model = glm::scale(Model, glm::vec3(0.005f));
     SetUniformM4(Render->Shaders[0], "Model", Model);
     glBindVertexArray(Render->VAOs[2]);

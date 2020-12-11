@@ -12,7 +12,8 @@
 #include <vector>
 #include <time.h>
 #include <math.h>
-#define internal static
+// TODO(Jovan): Fix this bug with freetype2
+/* #define internal static */
 #define global_variable static
 #define local_persist static
 
@@ -91,6 +92,14 @@ enum evolve_result
     StillEvolving
 };
 
+struct character
+{
+    uint32 TextureId;
+    glm::ivec2 Size;
+    glm::ivec2 Bearing;
+    long int Advance;
+};
+
 struct sdl_mouse
 {
     real32 Sensitivity;
@@ -140,9 +149,10 @@ struct sdl_input
 
 struct sdl_render
 {
-    uint32 Shaders[2];
+    uint32 Shaders[3];
     uint32 Textures[4];
-    uint32 VAOs[3];
+    uint32 VAOs[4];
+    uint32 VBOs[1];
     uint32 *Indices;
     uint32 *ModelIndices;
     uint32 Num;

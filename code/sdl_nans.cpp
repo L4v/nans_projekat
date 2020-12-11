@@ -17,12 +17,16 @@
 #include <assimp/cimport.h>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
+#include <map>
 
 #include "sdl_nans.h"
+#include <ft2build.h>
+#include FT_FREETYPE_H
 
 global_variable uint64 GlobalPerfCountFrequency;
+global_variable std::map<uint8, character> Characters;
 
-internal uint32
+static uint32
 LoadTexture(char *Path)
 {
     int32 Width, Height, NChannels;
@@ -65,7 +69,7 @@ LoadTexture(char *Path)
     return TextureID;
 }
 
-internal void
+static void
 CheckShaderCompilation(uint32 Shader, shader_type Type)
 {
     // NOTE(Jovan): Check if shader compilation failed
@@ -87,7 +91,7 @@ CheckShaderCompilation(uint32 Shader, shader_type Type)
     }
 }
 
-internal void
+static void
 CheckShaderLink(uint32 Program)
 {
     int32 success;
@@ -101,7 +105,7 @@ CheckShaderLink(uint32 Program)
     }
 }
 
-internal void
+static void
 SDLProcessSimKeyboardButton(sdl_button_state *NewState, bool32 IsDown)
 {
     Assert(NewState->EndedDown != IsDown);
@@ -114,7 +118,7 @@ void SDLWindowResize(int32 Width, int32 Height)
     glViewport(0, 0, Width, Height);
 }
 
-internal bool32
+static bool32
 SDLHandleEvent(SDL_Event *Event, sdl_input *Input, bool32 *InFocus)
 {
     bool32 ShouldQuit = 0;
@@ -248,21 +252,21 @@ SDLHandleEvent(SDL_Event *Event, sdl_input *Input, bool32 *InFocus)
     return ShouldQuit;
 }
 
-inline internal int64
+inline static int64
 SDLGetWallClock()
 {
     int64 Result = SDL_GetPerformanceCounter();
     return Result;
 }
 
-inline internal real32
+inline static real32
 SDLGetSecondsElapsed(int64 Start, int64 End)
 {
     real32 Result = (real32)(End - Start) / (real32)GlobalPerfCountFrequency;
     return Result;
 }
 
-internal inline time_t
+static inline time_t
 SDLGetLastWriteTime(char *Filename)
 {
     struct stat FileInfo = {};
@@ -275,7 +279,7 @@ SDLGetLastWriteTime(char *Filename)
     return Result;
 }
 
-internal sdl_sim_code
+static sdl_sim_code
 SDLLoadSimCode(char *DynLibName)
 {
     sdl_sim_code Result = {};
@@ -299,7 +303,7 @@ SDLLoadSimCode(char *DynLibName)
     return Result;
 }
 
-internal void
+static void
 SDLUnloadSimCode(sdl_sim_code *SimCode)
 {
     if (dlclose(SimCode->SimCodeDynLib))
@@ -337,10 +341,48 @@ void LoadShader(const char *file_name, char *shader_str, int max_len)
 }
 
 // TODO(Jovan): Optimize and use EBO?
-internal void
+static void
 LoadModel(const char *ModelFilepath, uint32 &ModelVAO, uint32 &ModelVBO)
 {
     // TODO(Jovan): Implement
+}
+
+// TODO(jovan): Refactor!!!
+static void
+RenderText(sdl_render *Render, std::string Text, real32 X, real32 Y, real32 Scale, glm::vec3 Color)
+{
+    glUseProgram(Render->Shaders[2]);
+    SetUniformF3(Render->Shaders[2], "textColor", Color.x, Color.y, Color.z);
+    glActiveTexture(GL_TEXTURE0);
+    glBindVertexArray(Render->VAOs[3]);
+    std::string::const_iterator c;
+    for (c = Text.begin(); c != Text.end(); ++c)
+    {
+        character ch = Characters[*c];
+        real32 xpos = X + ch.Bearing.x * Scale;
+        real32 ypos = Y - (ch.Size.y - ch.Bearing.y) * Scale;
+
+        real32 w = ch.Size.x * Scale;
+        real32 h = ch.Size.y * Scale;
+
+        real32 vertices[6][4] = {
+            {xpos, ypos + h, 0.0f, 0.0f},
+            {xpos, ypos, 0.0f, 1.0f},
+            {xpos + w, ypos, 1.0f, 1.0f},
+
+            {xpos, ypos + h, 0.0f, 0.0f},
+            {xpos + w, ypos, 1.0f, 1.0f},
+            {xpos + w, ypos + h, 1.0f, 0.0f}};
+
+        glBindTexture(GL_TEXTURE_2D, ch.TextureId);
+        glBindBuffer(GL_ARRAY_BUFFER, Render->VBOs[0]);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        X += (ch.Advance >> 6) * Scale;
+    }
+    glBindVertexArray(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 int main()
@@ -405,6 +447,63 @@ int main()
     // NOTE(Jovan): End of SDL stuff
     // -----------------------------
 
+    // NOTE(Jovan): Font stuff
+    // -----------------------
+
+    FT_Library ft;
+    if (FT_Init_FreeType(&ft))
+    {
+        printf("ERROR::FREETYPE: Failed to init freetype");
+        return 1;
+    }
+
+    FT_Face face;
+    if (FT_New_Face(ft, "../res/fonts/poppins.ttf", 0, &face))
+    {
+        printf("ERROR:FREETYPE: Failed to load Poppins font");
+        return 1;
+    }
+
+    FT_Set_Pixel_Sizes(face, 0, 24);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    for (uint8 C = 0;
+         C < 128;
+         ++C)
+    {
+        if (FT_Load_Char(face, C, FT_LOAD_RENDER))
+        {
+            printf("ERROR::FREETYPE: Failed to load glyph %c\n", C);
+            continue;
+        }
+        uint32 Texture;
+        glGenTextures(1, &Texture);
+        glBindTexture(GL_TEXTURE_2D, Texture);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RED,
+            face->glyph->bitmap.width,
+            face->glyph->bitmap.rows,
+            0,
+            GL_RED,
+            GL_UNSIGNED_BYTE,
+            face->glyph->bitmap.buffer);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        character Character = {
+            Texture,
+            glm::ivec2(face->glyph->bitmap.width, face->glyph->bitmap.rows),
+            glm::ivec2(face->glyph->bitmap_left, face->glyph->bitmap_top),
+            face->glyph->advance.x};
+        Characters.insert(std::pair<uint8, character>(C, Character));
+    }
+    FT_Done_Face(face);
+    FT_Done_FreeType(ft);
+
+    // NOTE(Jovan): End of font stuff
+
     // NOTE(Jovan): GL modeling and buffering
     // --------------------------------------
 
@@ -413,12 +512,16 @@ int main()
     char CubeFSSource[256 * 1024];
     char ModelVSSource[256 * 1024];
     char ModelFSSource[256 * 1024];
+    char TextVSSource[256 * 1024];
+    char TextFSSource[256 * 1024];
 
     // TODO(Jovan): Rename shader loader
     LoadShader("../shaders/cube.vs", CubeVSSource, 256 * 1024);
     LoadShader("../shaders/cube.fs", CubeFSSource, 256 * 1024);
     LoadShader("../shaders/model.vs", ModelVSSource, 256 * 1024);
     LoadShader("../shaders/model.fs", ModelFSSource, 256 * 1024);
+    LoadShader("../shaders/text.vs", TextVSSource, 256 * 1024);
+    LoadShader("../shaders/text.fs", TextFSSource, 256 * 1024);
 
     real32 CubeVertices[] =
         {
@@ -536,8 +639,8 @@ int main()
     uint32 CubeVS, CubeFS;
     uint32 CubeShaderProgram;
 
-    uint32 ModelVS, ModelFS;
-    uint32 ModelShaderProgram;
+    uint32 TextVS, TextFS;
+    uint32 TextShaderProgram;
 
     // NOTE(Jovan): Cube shaders
     CubeVS = glCreateShader(GL_VERTEX_SHADER);
@@ -562,30 +665,33 @@ int main()
     glDeleteShader(CubeVS);
     glDeleteShader(CubeFS);
 
-    ModelVS = glCreateShader(GL_VERTEX_SHADER);
-    ModelFS = glCreateShader(GL_FRAGMENT_SHADER);
-    p = (const GLchar *)ModelVSSource;
-    glShaderSource(ModelVS, 1, &p, 0);
-    p = (const GLchar *)ModelFSSource;
-    glShaderSource(ModelFS, 1, &p, 0);
-    glCompileShader(ModelVS);
-    CheckShaderCompilation(ModelVS, Vertex);
-    glCompileShader(ModelFS);
-    CheckShaderCompilation(ModelFS, Fragment);
+    // NOTE(Jovan): Text shaders
 
-    ModelShaderProgram = glCreateProgram();
-    glAttachShader(ModelShaderProgram, ModelVS);
-    glAttachShader(ModelShaderProgram, ModelFS);
-    glLinkProgram(ModelShaderProgram);
-    CheckShaderLink(ModelShaderProgram);
-    glDeleteShader(ModelVS);
-    glDeleteShader(ModelFS);
+    TextVS = glCreateShader(GL_VERTEX_SHADER);
+    TextFS = glCreateShader(GL_FRAGMENT_SHADER);
+    p = (const GLchar *)TextVSSource;
+    glShaderSource(TextVS, 1, &p, 0);
+    p = (const GLchar *)TextFSSource;
+    glShaderSource(TextFS, 1, &p, 0);
+    glCompileShader(TextVS);
+    CheckShaderCompilation(TextVS, Vertex);
+    glCompileShader(TextFS);
+    CheckShaderCompilation(TextFS, Fragment);
+
+    TextShaderProgram = glCreateProgram();
+    glAttachShader(TextShaderProgram, TextVS);
+    glAttachShader(TextShaderProgram, TextFS);
+    glLinkProgram(TextShaderProgram);
+    CheckShaderLink(TextShaderProgram);
+    glDeleteShader(TextVS);
+    glDeleteShader(TextFS);
 
     // NOTE(Jovan): VAO, EBO, VBO
     // TODO(Jovan): Gen arrays inside Render directly
     uint32 CubeVAO, CubeVBO,
         SphereVAO, SphereVBO,
-        FloorVAO, FloorVBO;
+        FloorVAO, FloorVBO,
+        TextVAO, TextVBO;
 
     // NOTE(Jovan): Floor data
     glGenVertexArrays(1, &FloorVAO);
@@ -642,6 +748,18 @@ int main()
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+
+    // NOTE(Jovan): Text data
+    glGenVertexArrays(1, &TextVAO);
+    glGenBuffers(1, &TextVBO);
+    glBindVertexArray(TextVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, TextVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(real32) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(real32), 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+
     // NOTE(Jovan): Textures
     uint32 CubeTexture, SphereTexture, FloorTexture, ModelTexture;
 
@@ -654,6 +772,8 @@ int main()
     // ---------------------------------------------
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     // NOTE(Jovan): Main loop
     bool32 Running = 1;
@@ -684,6 +804,10 @@ int main()
 
     Render.Textures[2] = FloorTexture;
     Render.VAOs[2] = FloorVAO;
+
+    Render.Shaders[2] = TextShaderProgram;
+    Render.VAOs[3] = TextVAO;
+    Render.VBOs[0] = TextVBO;
 
     // NOTE(Jovan): Assimp model loading
     // TODO(Jovan): Move to proper location
@@ -749,7 +873,7 @@ int main()
     Render.ModelIndices = MeshFaceIndices;
     Render.VAOs[2] = ModelVAO;
     Render.ModelNum = ArrayCount(MeshFaceIndices);
-    Render.Shaders[1] = ModelShaderProgram;
+    Render.Shaders[1] = TextShaderProgram;
     Render.Textures[3] = ModelTexture;
     // NOTE(Jovan): End assimp model loading
 
@@ -821,6 +945,12 @@ int main()
         glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         Sim.UpdateAndRender(&SimMemory, NewInput, &Render, dt);
+        // NOTE(Jovan): Text rendering
+        // ---------------------------
+        glm::mat4 Projection = glm::ortho(0.0f, (real32)Width, 0.0f, (real32)Height);
+        RenderText(&Render, "Jovan Ivosevic RA30/2017", 25.0f, 25.0f, 1.0f, glm::vec3(0.91f, 0.30f, 0.24f));
+        SetUniformM4(Render.Shaders[1], "projection", Projection);
+        // NOTE(Jovan): End text rendering
         glBindVertexArray(0);
 
         // NOTE(Jovan): Swap buffers
