@@ -951,10 +951,6 @@ int main()
         RenderText(&Render, "Jovan Ivosevic RA30/2017", 25.0f, 25.0f, 1.0f, glm::vec3(0.91f, 0.30f, 0.24f));
         SetUniformM4(Render.Shaders[1], "projection", Projection);
         // NOTE(Jovan): End text rendering
-        glBindVertexArray(0);
-
-        // NOTE(Jovan): Swap buffers
-        SDL_GL_SwapWindow(Window);
 
         // NOTE(Jovan): Timing
         int64 EndCounter = SDLGetWallClock();
@@ -965,6 +961,10 @@ int main()
         LastCounter = EndCounter;
         char Buffer[256];
         sprintf(Buffer, "MSPerFrame = %f, FPS = %f", MSPerFrame, FPS);
+        // TODO(Jovan): Move? Use DEBUG text rendering?
+        RenderText(&Render, Buffer, ((real32)Width) / 2.0f, (real32)Height - 25.0f, 1.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+        // NOTE(Jovan): Swap buffers // TODO(Jovan): Move???
+        SDL_GL_SwapWindow(Window);
         SDL_SetWindowTitle(Window, Buffer);
 
         sdl_input *Temp = NewInput;
