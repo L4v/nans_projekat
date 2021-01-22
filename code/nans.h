@@ -92,6 +92,12 @@ enum evolve_result
     StillEvolving
 };
 
+struct light
+{
+    glm::vec3 Position;
+    real32 Size;
+};
+
 struct character
 {
     uint32 TextureId;
@@ -147,16 +153,57 @@ struct sdl_input
     sdl_mouse MouseController;
 };
 
+enum sdl_texture
+{
+    CONTAINER = 0,
+    EARTH,
+    CHECKERBOARD,
+    AMONG_US,
+    TEXTURE_COUNT
+};
+
+enum sdl_vao
+{
+    CUBEVAO = 0,
+    SPHEREVAO,
+    FLOORVAO,
+    TEXTVAO,
+    LIGHTVAO,
+    MODELVAO,
+    VAO_COUNT
+};
+
+enum sdl_vbo
+{
+    CUBEVBO = 0,
+    SPHEREVBO,
+    FLOORVBO,
+    TEXTVBO,
+    LIGHTVBO,
+    MODELVBO,
+    VBO_COUNT
+};
+
+enum sdl_shader
+{
+    CUBESH,
+    TEXTSH,
+    LIGHTSH,
+    SHADER_COUNT
+};
+
 struct sdl_render
 {
-    uint32 Shaders[3];
-    uint32 Textures[4];
-    uint32 VAOs[4];
-    uint32 VBOs[1];
+    uint32 Shaders[SHADER_COUNT];
+    uint32 Textures[TEXTURE_COUNT];
+    uint32 VAOs[VAO_COUNT];
+    uint32 VBOs[VBO_COUNT];
     uint32 *Indices;
     uint32 *ModelIndices;
     uint32 Num;
     uint32 ModelNum;
+
+    uint32 LightVAO;
 
     glm::mat4 View;
     glm::mat4 Projection;
@@ -317,6 +364,7 @@ struct sdl_state
     // NOTE(Jovan): The floor is just a giant cube
     cube Floor;
     sdl_camera Camera;
+    light Light;
     uint32 CubeCount;
     uint32 SphereCount;
     std::vector<contact_pair> Pairs;

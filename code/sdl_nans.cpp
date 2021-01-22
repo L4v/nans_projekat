@@ -26,6 +26,32 @@
 global_variable uint64 GlobalPerfCountFrequency;
 global_variable std::map<uint8, character> Characters;
 
+
+global_variable char *texture_paths[] =
+{
+    "../res/texture/container.jpg",
+    "../res/texture/earth.jpg",
+    "../res/texture/checkerboard.png",
+    "../res/texture/Plastic_4K_Diffuse.jpg",
+    ""
+};
+
+global_variable char *vs_paths[] =
+    {
+        "../shaders/cube.vs",
+        "../shaders/text.vs",
+        "../shaders/light.vs",
+        ""
+    };
+
+global_variable char *fs_paths[] =
+    {
+        "../shaders/cube.fs",
+        "../shaders/text.fs",
+        "../shaders/light.fs",
+        ""
+    };
+
 static uint32
 LoadTexture(char *Path)
 {
@@ -62,11 +88,22 @@ LoadTexture(char *Path)
     }
     else
     {
-        printf("ERROR::TEXTURE::Failed to load texure!\n");
+        printf("ERROR::TEXTURE::Failed to load texure! Path: %s\n", Path);
     }
     stbi_image_free(Data);
 
     return TextureID;
+}
+
+static void
+LoadTextures(sdl_render* Render)
+{
+    char** TexturePaths = texture_paths;
+    uint32 TexIndex = 0;
+    while(strcmp(*TexturePaths, ""))
+    {
+        Render->Textures[TexIndex++] = LoadTexture(*TexturePaths++);
+    }
 }
 
 static void
@@ -79,7 +116,7 @@ CheckShaderCompilation(uint32 Shader, shader_type Type)
     if (!success)
     {
         glGetShaderInfoLog(Shader, 512, NULL, infoLog);
-        if (Type == Vertex)
+        if (Type == VERTEX)
         {
             printf("ERROR::SHADER::VERTEX:COMPILATION_FAILED\n");
         }
@@ -102,6 +139,78 @@ CheckShaderLink(uint32 Program)
     {
         glGetProgramInfoLog(Program, 512, NULL, infoLog);
         printf("ERROR::SHADER_PROGRAM::LINKING_FAILED\n%s\n", infoLog);
+    }
+}
+
+void LoadShader(const char *file_name, char *shader_str, int max_len)
+{
+    FILE *file = fopen(file_name, "r");
+    if (!file)
+    {
+        printf("ERROR: opening file for reading: %s\n", file_name);
+        return;
+    }
+    size_t cnt = fread(shader_str, 1, max_len - 1, file);
+    if ((int)cnt >= max_len - 1)
+    {
+        printf("WARNING: file %s too big - truncated.\n", file_name);
+    }
+    if (ferror(file))
+    {
+        printf("ERROR: reading shader file %s\n", file_name);
+        fclose(file);
+        return;
+    }
+    shader_str[cnt] = 0;
+    fclose(file);
+}
+
+static void
+LoadShaders(sdl_render* Render)
+{
+    char** VSPaths = vs_paths;
+    char** FSPaths = fs_paths;
+
+    char VSSources[SHADER_COUNT][256 * 1024];
+    char FSSources[SHADER_COUNT][256 * 1024];
+
+    // TODO(Jovan): Rename shader loader
+
+    uint32 ShaderIndex = 0;
+    while(strcmp(*VSPaths, ""))
+    {
+        LoadShader(*VSPaths++, VSSources[ShaderIndex++], 256 * 1024);
+    }
+    ShaderIndex = 0;
+    while(strcmp(*FSPaths, ""))
+    {
+        LoadShader(*FSPaths++, FSSources[ShaderIndex++], 256 * 1024);
+    }
+
+    for(ShaderIndex = 0;
+        ShaderIndex < SHADER_COUNT;
+        ++ShaderIndex)
+    {
+        uint32 VS = glCreateShader(GL_VERTEX_SHADER);
+        uint32 FS = glCreateShader(GL_FRAGMENT_SHADER);
+        const GLchar *p;
+        p = (const GLchar *)VSSources[ShaderIndex];
+        glShaderSource(VS, 1, &p, 0);
+        p = (const GLchar *)FSSources[ShaderIndex];
+        glShaderSource(FS, 1, &p, 0);
+        glCompileShader(VS);
+        CheckShaderCompilation(VS, VERTEX);
+        glCompileShader(FS);
+        CheckShaderCompilation(FS, FRAGMENT);
+        uint32 ShaderProgram = glCreateProgram();
+        glAttachShader(ShaderProgram, VS);
+        glAttachShader(ShaderProgram, FS);
+        glLinkProgram(ShaderProgram);
+        CheckShaderLink(ShaderProgram);
+        glDeleteShader(VS);
+        glDeleteShader(FS);
+        Render->Shaders[ShaderIndex] =ShaderProgram;
+
     }
 }
 
@@ -317,29 +426,6 @@ SDLUnloadSimCode(sdl_sim_code *SimCode)
     SimCode->UpdateAndRender = SimUpdateAndRenderStub;
 }
 
-void LoadShader(const char *file_name, char *shader_str, int max_len)
-{
-    FILE *file = fopen(file_name, "r");
-    if (!file)
-    {
-        printf("ERROR: opening file for reading: %s\n", file_name);
-        return;
-    }
-    size_t cnt = fread(shader_str, 1, max_len - 1, file);
-    if ((int)cnt >= max_len - 1)
-    {
-        printf("WARNING: file %s too big - truncated.\n", file_name);
-    }
-    if (ferror(file))
-    {
-        printf("ERROR: reading shader file %s\n", file_name);
-        fclose(file);
-        return;
-    }
-    shader_str[cnt] = 0;
-    fclose(file);
-}
-
 // TODO(Jovan): Optimize and use EBO?
 static void
 LoadModel(const char *ModelFilepath, uint32 &ModelVAO, uint32 &ModelVBO)
@@ -351,10 +437,10 @@ LoadModel(const char *ModelFilepath, uint32 &ModelVAO, uint32 &ModelVBO)
 static void
 RenderText(sdl_render *Render, std::string Text, real32 X, real32 Y, real32 Scale, glm::vec3 Color)
 {
-    glUseProgram(Render->Shaders[2]);
-    SetUniformF3(Render->Shaders[2], "textColor", Color.x, Color.y, Color.z);
+    glUseProgram(Render->Shaders[1]);
+    SetUniformF3(Render->Shaders[1], "textColor", Color.x, Color.y, Color.z);
     glActiveTexture(GL_TEXTURE0);
-    glBindVertexArray(Render->VAOs[3]);
+    glBindVertexArray(Render->VAOs[TEXTVAO]);
     std::string::const_iterator c;
     for (c = Text.begin(); c != Text.end(); ++c)
     {
@@ -375,7 +461,7 @@ RenderText(sdl_render *Render, std::string Text, real32 X, real32 Y, real32 Scal
             {xpos + w, ypos + h, 1.0f, 0.0f}};
 
         glBindTexture(GL_TEXTURE_2D, ch.TextureId);
-        glBindBuffer(GL_ARRAY_BUFFER, Render->VBOs[0]);
+        glBindBuffer(GL_ARRAY_BUFFER, Render->VBOs[TEXTVBO]);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glDrawArrays(GL_TRIANGLES, 0, 6);
@@ -507,66 +593,94 @@ int main()
     // NOTE(Jovan): GL modeling and buffering
     // --------------------------------------
 
-    // TODO(Jovan): To transient storage
-    char CubeVSSource[256 * 1024];
-    char CubeFSSource[256 * 1024];
-    char ModelVSSource[256 * 1024];
-    char ModelFSSource[256 * 1024];
-    char TextVSSource[256 * 1024];
-    char TextFSSource[256 * 1024];
-
-    // TODO(Jovan): Rename shader loader
-    LoadShader("../shaders/cube.vs", CubeVSSource, 256 * 1024);
-    LoadShader("../shaders/cube.fs", CubeFSSource, 256 * 1024);
-    LoadShader("../shaders/model.vs", ModelVSSource, 256 * 1024);
-    LoadShader("../shaders/model.fs", ModelFSSource, 256 * 1024);
-    LoadShader("../shaders/text.vs", TextVSSource, 256 * 1024);
-    LoadShader("../shaders/text.fs", TextFSSource, 256 * 1024);
-
     real32 CubeVertices[] =
         {
-            // X  |  Y   |  Z  | Tex coords
-            -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
-            0.5f, -0.5f, -0.5f, 1.0f, 0.0f,
-            0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
-            0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
-            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f,
-            -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
+            // X  |  Y   |  Z  | Tex coords  | Normals
+            -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+            0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 0.0f, -1.0f,
+            0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f, -1.0f,
+            0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 0.0f, -1.0f,
+            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, -1.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f,
 
-            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
-            0.5f, -0.5f, 0.5f, 1.0f, 0.0f,
-            0.5f, 0.5f, 0.5f, 1.0f, 1.0f,
-            0.5f, 0.5f, 0.5f, 1.0f, 1.0f,
-            -0.5f, 0.5f, 0.5f, 0.0f, 1.0f,
-            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
+            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+            0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+            -0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
 
-            -0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
-            -0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
-            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
-            -0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
+            -0.5f, 0.5f, 0.5f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f,
+            -0.5f, 0.5f, -0.5f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, -1.0f, 0.0f, 0.0f,
+            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f,
+            -0.5f, 0.5f, 0.5f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f,
 
-            0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
-            0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
-            0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-            0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-            0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
-            0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+            0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+            0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+            0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f,
+            0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f,
 
-            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-            0.5f, -0.5f, -0.5f, 1.0f, 1.0f,
-            0.5f, -0.5f, 0.5f, 1.0f, 0.0f,
-            0.5f, -0.5f, 0.5f, 1.0f, 0.0f,
-            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f,
-            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+            0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f, -1.0f, 0.0f,
+            0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, -1.0f, 0.0f,
+            0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, -1.0f, 0.0f,
+            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, -1.0f, 0.0f,
 
-            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f,
-            0.5f, 0.5f, -0.5f, 1.0f, 1.0f,
-            0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
-            0.5f, 0.5f, 0.5f, 1.0f, 0.0f,
-            -0.5f, 0.5f, 0.5f, 0.0f, 0.0f,
-            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f};
+            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f};
+
+    real32 LightVertices[] =
+        {
+            -0.5f, -0.5f, -0.5f,
+            0.5f, -0.5f, -0.5f,
+            0.5f, 0.5f, -0.5f,
+            0.5f, 0.5f, -0.5f,
+            -0.5f, 0.5f, -0.5f,
+            -0.5f, -0.5f, -0.5f,
+
+            -0.5f, -0.5f, 0.5f,
+            0.5f, -0.5f, 0.5f,
+            0.5f, 0.5f, 0.5f,
+            0.5f, 0.5f, 0.5f,
+            -0.5f, 0.5f, 0.5f,
+            -0.5f, -0.5f, 0.5f,
+
+            -0.5f, 0.5f, 0.5f,
+            -0.5f, 0.5f, -0.5f,
+            -0.5f, -0.5f, -0.5f,
+            -0.5f, -0.5f, -0.5f,
+            -0.5f, -0.5f, 0.5f,
+            -0.5f, 0.5f, 0.5f,
+
+            0.5f, 0.5f, 0.5f,
+            0.5f, 0.5f, -0.5f,
+            0.5f, -0.5f, -0.5f,
+            0.5f, -0.5f, -0.5f,
+            0.5f, -0.5f, 0.5f,
+            0.5f, 0.5f, 0.5f,
+
+            -0.5f, -0.5f, -0.5f,
+            0.5f, -0.5f, -0.5f,
+            0.5f, -0.5f, 0.5f,
+            0.5f, -0.5f, 0.5f,
+            -0.5f, -0.5f, 0.5f,
+            -0.5f, -0.5f, -0.5f,
+
+            -0.5f, 0.5f, -0.5f,
+            0.5f, 0.5f, -0.5f,
+            0.5f, 0.5f, 0.5f,
+            0.5f, 0.5f, 0.5f,
+            -0.5f, 0.5f, 0.5f,
+            -0.5f, 0.5f, -0.5f};
 
     uint32 RectIndices[] =
         {
@@ -636,70 +750,20 @@ int main()
     }
 
     // NOTE(Jovan): Creating shaders and shader programs
-    uint32 CubeVS, CubeFS;
-    uint32 CubeShaderProgram;
-
-    uint32 TextVS, TextFS;
-    uint32 TextShaderProgram;
-
-    // NOTE(Jovan): Cube shaders
-    CubeVS = glCreateShader(GL_VERTEX_SHADER);
-    CubeFS = glCreateShader(GL_FRAGMENT_SHADER);
-    const GLchar *p;
-    p = (const GLchar *)CubeVSSource;
-    glShaderSource(CubeVS, 1, &p, 0);
-    p = (const GLchar *)CubeFSSource;
-    glShaderSource(CubeFS, 1, &p, 0);
-
-    glCompileShader(CubeVS);
-    CheckShaderCompilation(CubeVS, Vertex);
-
-    glCompileShader(CubeFS);
-    CheckShaderCompilation(CubeVS, Fragment);
-
-    CubeShaderProgram = glCreateProgram();
-    glAttachShader(CubeShaderProgram, CubeVS);
-    glAttachShader(CubeShaderProgram, CubeFS);
-    glLinkProgram(CubeShaderProgram);
-    CheckShaderLink(CubeShaderProgram);
-    glDeleteShader(CubeVS);
-    glDeleteShader(CubeFS);
-
-    // NOTE(Jovan): Text shaders
-
-    TextVS = glCreateShader(GL_VERTEX_SHADER);
-    TextFS = glCreateShader(GL_FRAGMENT_SHADER);
-    p = (const GLchar *)TextVSSource;
-    glShaderSource(TextVS, 1, &p, 0);
-    p = (const GLchar *)TextFSSource;
-    glShaderSource(TextFS, 1, &p, 0);
-    glCompileShader(TextVS);
-    CheckShaderCompilation(TextVS, Vertex);
-    glCompileShader(TextFS);
-    CheckShaderCompilation(TextFS, Fragment);
-
-    TextShaderProgram = glCreateProgram();
-    glAttachShader(TextShaderProgram, TextVS);
-    glAttachShader(TextShaderProgram, TextFS);
-    glLinkProgram(TextShaderProgram);
-    CheckShaderLink(TextShaderProgram);
-    glDeleteShader(TextVS);
-    glDeleteShader(TextFS);
+    // TODO(Jovan): To transient storage
+    sdl_render Render = {};
+    LoadShaders(&Render);
 
     // NOTE(Jovan): VAO, EBO, VBO
     // TODO(Jovan): Gen arrays inside Render directly
-    uint32 CubeVAO, CubeVBO,
-        SphereVAO, SphereVBO,
-        FloorVAO, FloorVBO,
-        TextVAO, TextVBO;
 
     // NOTE(Jovan): Floor data
-    glGenVertexArrays(1, &FloorVAO);
-    glBindVertexArray(FloorVAO);
-    glGenBuffers(1, &FloorVBO);
+    glGenVertexArrays(VAO_COUNT, Render.VAOs);
+    glGenBuffers(VBO_COUNT, Render.VBOs);
 
+    glBindVertexArray(Render.VAOs[FLOORVAO]);
     // TODO(Jovan): Change to static draw
-    glBindBuffer(GL_ARRAY_BUFFER, FloorVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, Render.VBOs[FLOORVBO]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(FloorVertices), FloorVertices,
                  GL_DYNAMIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
@@ -712,31 +776,27 @@ int main()
     glBindVertexArray(0);
 
     // NOTE(Jovan): Cube data
-    glGenVertexArrays(1, &CubeVAO);
-    glBindVertexArray(CubeVAO);
-    glGenBuffers(1, &CubeVBO);
+    glBindVertexArray(Render.VAOs[CUBEVAO]);
 
     // TODO(Jovan): Change to static draw
-    glBindBuffer(GL_ARRAY_BUFFER, CubeVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, Render.VBOs[CUBEVBO]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(CubeVertices), CubeVertices,
                  GL_DYNAMIC_DRAW);
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
                           (void *)0);
     glEnableVertexAttribArray(0);
 
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
                           (void *)(3 * sizeof(real32)));
     glEnableVertexAttribArray(1);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
     // NOTE(Jovan): Sphere data
-    glGenVertexArrays(1, &SphereVAO);
-    glBindVertexArray(SphereVAO);
+    glBindVertexArray(Render.VAOs[SPHEREVAO]);
 
-    glGenBuffers(1, &SphereVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, SphereVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, Render.VBOs[SPHEREVBO]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(SphereVertices), SphereVertices, GL_DYNAMIC_DRAW);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
@@ -750,27 +810,25 @@ int main()
     glBindVertexArray(0);
 
     // NOTE(Jovan): Text data
-    glGenVertexArrays(1, &TextVAO);
-    glGenBuffers(1, &TextVBO);
-    glBindVertexArray(TextVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, TextVBO);
+    glBindVertexArray(Render.VAOs[TEXTVAO]);
+    glBindBuffer(GL_ARRAY_BUFFER, Render.VBOs[TEXTVBO]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(real32) * 6 * 4, NULL, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(real32), 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
-    // NOTE(Jovan): Textures
-    uint32 CubeTexture, SphereTexture, FloorTexture, ModelTexture;
+    // NOTE(Jovan): Light data
+    glBindVertexArray(Render.VAOs[LIGHTVAO]);
+    glBindBuffer(GL_ARRAY_BUFFER, Render.VBOs[CUBEVBO]);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(real32), (void *)0);
+    glEnableVertexAttribArray(0);
 
-    CubeTexture = LoadTexture("../res/texture/container.jpg");
-    SphereTexture = LoadTexture("../res/texture/earth.jpg");
-    FloorTexture = LoadTexture("../res/texture/checkerboard.png");
-    ModelTexture = LoadTexture("../res/texture/Plastic_4K_Diffuse.jpg");
+    // NOTE(Jovan): Textures
+    LoadTextures(&Render);
 
     // NOTE(Jovan): End of GL modeling and buffering
     // ---------------------------------------------
-
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -791,23 +849,8 @@ int main()
 
     sdl_sim_code Sim = SDLLoadSimCode("nans.so");
 
-    // NOTE(Jovan): Renderer
-    sdl_render Render = {};
-    Render.Shaders[0] = CubeShaderProgram;
-    Render.Textures[0] = CubeTexture;
-    Render.VAOs[0] = CubeVAO;
-
-    Render.Textures[1] = SphereTexture;
-    Render.VAOs[1] = SphereVAO;
     Render.Indices = SphereIndices;
     Render.Num = ArrayCount(SphereIndices);
-
-    Render.Textures[2] = FloorTexture;
-    Render.VAOs[2] = FloorVAO;
-
-    Render.Shaders[2] = TextShaderProgram;
-    Render.VAOs[3] = TextVAO;
-    Render.VBOs[0] = TextVBO;
 
     // NOTE(Jovan): Assimp model loading
     // TODO(Jovan): Move to proper location
@@ -849,14 +892,9 @@ int main()
         MeshFaceIndices[IndexCount++] = Mesh->mFaces[FaceIndex].mIndices[2];
     }
 
-    uint32 ModelVAO, ModelVBO;
+    glBindVertexArray(Render.VAOs[MODELVAO]);
 
-    glGenVertexArrays(1, &ModelVAO);
-    glBindVertexArray(ModelVAO);
-    glGenBuffers(1, &ModelVBO);
-    // ----
-
-    glBindBuffer(GL_ARRAY_BUFFER, ModelVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, Render.VBOs[MODELVBO]);
     glBufferData(GL_ARRAY_BUFFER, 5 * NumMeshVertices * sizeof(real32), MeshVertices, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
@@ -871,10 +909,7 @@ int main()
     //---
 
     Render.ModelIndices = MeshFaceIndices;
-    Render.VAOs[2] = ModelVAO;
     Render.ModelNum = ArrayCount(MeshFaceIndices);
-    Render.Shaders[1] = TextShaderProgram;
-    Render.Textures[3] = ModelTexture;
     // NOTE(Jovan): End assimp model loading
 
     while (Running)
@@ -949,7 +984,7 @@ int main()
         // ---------------------------
         glm::mat4 Projection = glm::ortho(0.0f, (real32)Width, 0.0f, (real32)Height);
         RenderText(&Render, "Jovan Ivosevic RA30/2017", 25.0f, 25.0f, 1.0f, glm::vec3(0.91f, 0.30f, 0.24f));
-        SetUniformM4(Render.Shaders[1], "projection", Projection);
+        SetUniformM4(Render.Shaders[TEXTSH], "projection", Projection);
         // NOTE(Jovan): End text rendering
 
         // NOTE(Jovan): Timing
