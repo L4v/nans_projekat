@@ -7,7 +7,6 @@ uniform mat4 Projection;
 
 out vec4 vertexColor;
 
-
 void main()
 {
 	gl_Position = Projection * View * Model * vec4(aPos, 1.0);

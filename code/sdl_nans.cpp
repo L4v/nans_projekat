@@ -29,7 +29,8 @@ global_variable std::map<uint8, character> Characters;
 
 global_variable char *texture_paths[] =
 {
-    "../res/texture/container.jpg",
+    "../res/texture/container_diffuse.png",
+    "../res/texture/container_specular.png",
     "../res/texture/earth.jpg",
     "../res/texture/checkerboard.png",
     "../res/texture/Plastic_4K_Diffuse.jpg",
@@ -767,29 +768,29 @@ int main()
     glBufferData(GL_ARRAY_BUFFER, sizeof(FloorVertices), FloorVertices,
                  GL_DYNAMIC_DRAW);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
-                          (void *)(0));
+        (void *)(0));
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
-                          (void *)(3 * sizeof(real32)));
+        (void *)(3 * sizeof(real32)));
     glEnableVertexAttribArray(1);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
     // NOTE(Jovan): Cube data
     glBindVertexArray(Render.VAOs[CUBEVAO]);
-
     // TODO(Jovan): Change to static draw
     glBindBuffer(GL_ARRAY_BUFFER, Render.VBOs[CUBEVBO]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(CubeVertices), CubeVertices,
                  GL_DYNAMIC_DRAW);
-
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
-                          (void *)0);
+        (void *)0);
     glEnableVertexAttribArray(0);
-
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
-                          (void *)(3 * sizeof(real32)));
+        (void *)(3 * sizeof(real32)));
     glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
+        (void* )(5 * sizeof(real32)));
+    glEnableVertexAttribArray(2);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
@@ -798,14 +799,12 @@ int main()
 
     glBindBuffer(GL_ARRAY_BUFFER, Render.VBOs[SPHEREVBO]);
     glBufferData(GL_ARRAY_BUFFER, sizeof(SphereVertices), SphereVertices, GL_DYNAMIC_DRAW);
-
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
-                          (void *)0);
+        (void *)0);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
-                          (void *)(3 * sizeof(real32)));
+        (void *)(3 * sizeof(real32)));
     glEnableVertexAttribArray(1);
-
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
 
@@ -853,7 +852,7 @@ int main()
     Render.Num = ArrayCount(SphereIndices);
 
     // NOTE(Jovan): Assimp model loading
-    // TODO(Jovan): Move to proper location
+    // TODO(Jovan): Move to proper location / compact to function
     // -------------------------------------
     const char *ModelFilepath = "../res/model/amongus.obj";
     const struct aiScene *Scene = aiImportFile(ModelFilepath, aiProcess_Triangulate | aiProcess_FlipUVs);

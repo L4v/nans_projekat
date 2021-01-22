@@ -155,7 +155,8 @@ struct sdl_input
 
 enum sdl_texture
 {
-    CONTAINER = 0,
+    CONTAINER_DIFFUSE = 0,
+    CONTAINER_SPECULAR,
     EARTH,
     CHECKERBOARD,
     AMONG_US,

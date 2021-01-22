@@ -1,4 +1,16 @@
 static void
+SetUniformF1(uint32 id, char* uniform, real32 value)
+{
+  glUniform1f(glGetUniformLocation(id, uniform), value); 
+}
+
+static void
+SetUniformI1(uint32 id, char* uniform, int32 value)
+{
+  glUniform1i(glGetUniformLocation(id, uniform), value); 
+}
+
+static void
 SetUniformM4(uint32 ID, char *Uniform, const glm::mat4 &Mat4)
 {
   glUniformMatrix4fv(glGetUniformLocation(ID, Uniform), 1, GL_FALSE, &Mat4[0][0]);
