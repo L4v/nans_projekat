@@ -867,7 +867,7 @@ int main()
     const struct aiMesh *Mesh = Scene->mMeshes[0];
     int32 NumMeshVertices = Mesh->mNumVertices;
     printf("Mesh with %d vertices\n", NumMeshVertices);
-    real32 MeshVertices[5 * NumMeshVertices];
+    real32 MeshVertices[8 * NumMeshVertices];
     uint32 VertexCount = 0;
     for (int VertexIndex = 0;
          VertexIndex < NumMeshVertices;
@@ -878,6 +878,9 @@ int main()
         MeshVertices[VertexCount++] = Mesh->mVertices[VertexIndex].z;
         MeshVertices[VertexCount++] = Mesh->mTextureCoords[0][VertexIndex].x;
         MeshVertices[VertexCount++] = Mesh->mTextureCoords[0][VertexIndex].y;
+        MeshVertices[VertexCount++] = Mesh->mNormals[VertexIndex].x;
+        MeshVertices[VertexCount++] = Mesh->mNormals[VertexIndex].y;
+        MeshVertices[VertexCount++] = Mesh->mNormals[VertexIndex].z;
     }
     printf("Mesh with %d faces\n", Mesh->mNumFaces);
     int32 NumMeshFaces = Mesh->mNumFaces;
@@ -897,13 +900,16 @@ int main()
     glBindVertexArray(Render.VAOs[MODELVAO]);
 
     glBindBuffer(GL_ARRAY_BUFFER, Render.VBOs[MODELVBO]);
-    glBufferData(GL_ARRAY_BUFFER, 5 * NumMeshVertices * sizeof(real32), MeshVertices, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 8 * NumMeshVertices * sizeof(real32), MeshVertices, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
+        (void *)0);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
-                          (void *)0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
+        (void *)(3 * sizeof(real32)));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(real32),
-                          (void *)(3 * sizeof(real32)));
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
+        (void *)(5 * sizeof(real32)));
+    glEnableVertexAttribArray(2);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
