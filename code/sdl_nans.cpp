@@ -34,6 +34,9 @@ global_variable char *texture_paths[] =
     "../res/texture/earth.jpg",
     "../res/texture/checkerboard.png",
     "../res/texture/Plastic_4K_Diffuse.jpg",
+    "../res/texture/Plastic_4K_Reflect.jpg",
+    "../res/texture/floor_albedo.png",
+    "../res/texture/floor_specular.png",
     ""
 };
 

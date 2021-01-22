@@ -55,6 +55,9 @@ typedef double real64;
 #define MAX_EPA_ERROR 0.001f
 #define MAX_EPA_ITERATIONS 64
 
+#define POINT_LIGHT_COUNT 4
+
+
 #if SLOW_BUILD
 #define Assert(Expression) \
     if (!(Expression))     \
@@ -96,6 +99,14 @@ struct light
 {
     glm::vec3 Position;
     real32 Size;
+    
+    real32 Kc;
+    real32 Kl;
+    real32 Kq;
+
+    glm::vec3 Ambient;
+    glm::vec3 Diffuse;
+    glm::vec3 Specular;
 };
 
 struct character
@@ -159,7 +170,10 @@ enum sdl_texture
     CONTAINER_SPECULAR,
     EARTH,
     CHECKERBOARD,
-    AMONG_US,
+    AMONG_US_DIFFUSE,
+    AMONG_US_SPECULAR,
+    METAL_ALBEDO,
+    METAL_SPECULAR,
     TEXTURE_COUNT
 };
 
@@ -365,7 +379,7 @@ struct sdl_state
     // NOTE(Jovan): The floor is just a giant cube
     cube Floor;
     sdl_camera Camera;
-    light Light;
+    light Lights[POINT_LIGHT_COUNT];
     uint32 CubeCount;
     uint32 SphereCount;
     std::vector<contact_pair> Pairs;
