@@ -41,6 +41,10 @@ uniform vec3 ViewPos;
 uniform dirLight DirLight;
 uniform pointLight PointLights[POINT_LIGHT_COUNT];
 uniform material Material;
+uniform float TexScale;
+
+// NOTE(Jovan): Scaled TexCoord
+vec2 TexCoords;
 
 vec3
 CalcDirLight(dirLight light, vec3 normal, vec3 viewDir);
@@ -50,6 +54,8 @@ CalcPointLight(pointLight, vec3 normal, vec3 fragPos, vec3 viewDir);
 void
 main()
 {
+    TexCoords = TexScale * (TexCoord + 0.5) + 0.5 * TexScale; 
+
     // TODO(Jovan): Optimize, remove duplicate code (reflection, etc...)
     vec3 Norm = normalize(Normal);
     vec3 ViewDir = normalize(ViewPos - FragPos);
@@ -80,9 +86,9 @@ CalcDirLight(dirLight light, vec3 normal, vec3 viewDir)
     vec3 ReflectDir = reflect(-LightDir, normal);
     float Spec = pow(max(dot(viewDir, ReflectDir), 0.0), Material.Shininess);
     // NOTE(Jovan): Ambient and phong
-    vec3 Ambient  = light.Ambient  * vec3(texture(Material.Diffuse, TexCoord));
-    vec3 Diffuse  = light.Diffuse  * Diff * vec3(texture(Material.Diffuse, TexCoord));
-    vec3 Specular = light.Specular * Spec * vec3(texture(Material.Specular, TexCoord));
+    vec3 Ambient  = light.Ambient  * vec3(texture(Material.Diffuse, TexCoords));
+    vec3 Diffuse  = light.Diffuse  * Diff * vec3(texture(Material.Diffuse, TexCoords));
+    vec3 Specular = light.Specular * Spec * vec3(texture(Material.Specular, TexCoords));
     return (Ambient + Diffuse + Specular);
 }
 
@@ -100,9 +106,9 @@ CalcPointLight(pointLight light, vec3 normal, vec3 fragPos, vec3 viewDir)
     float Attenuation = 1.0 / (light.Constant + light.Linear * Distance + 
         light.Quadratic * (Distance * Distance));    
     // NOTE(Jovan): Ambient and phong
-    vec3 Ambient  = light.Ambient  * vec3(texture(Material.Diffuse, TexCoord));
-    vec3 Diffuse  = light.Diffuse  * Diff * vec3(texture(Material.Diffuse, TexCoord));
-    vec3 Specular = light.Specular * Spec * vec3(texture(Material.Specular, TexCoord));
+    vec3 Ambient  = light.Ambient  * vec3(texture(Material.Diffuse, TexCoords));
+    vec3 Diffuse  = light.Diffuse  * Diff * vec3(texture(Material.Diffuse, TexCoords));
+    vec3 Specular = light.Specular * Spec * vec3(texture(Material.Specular, TexCoords));
     Ambient  *= Attenuation;
     Diffuse  *= Attenuation;
     Specular *= Attenuation;

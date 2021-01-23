@@ -42,7 +42,7 @@ global_variable char *texture_paths[] =
 
 global_variable char *vs_paths[] =
     {
-        "../shaders/cube.vs",
+        "../shaders/simple_color.vs",
         "../shaders/text.vs",
         "../shaders/light.vs",
         ""
@@ -50,7 +50,7 @@ global_variable char *vs_paths[] =
 
 global_variable char *fs_paths[] =
     {
-        "../shaders/cube.fs",
+        "../shaders/simple_color.fs",
         "../shaders/text.fs",
         "../shaders/light.fs",
         ""
@@ -992,7 +992,7 @@ int main()
         // ---------------------------
         glm::mat4 Projection = glm::ortho(0.0f, (real32)Width, 0.0f, (real32)Height);
         RenderText(&Render, "Jovan Ivosevic RA30/2017", 25.0f, 25.0f, 1.0f, glm::vec3(0.91f, 0.30f, 0.24f));
-        SetUniformM4(Render.Shaders[TEXTSH], "projection", Projection);
+        SetUniformM4(Render.Shaders[TEXT_SH], "projection", Projection);
         // NOTE(Jovan): End text rendering
 
         // NOTE(Jovan): Timing

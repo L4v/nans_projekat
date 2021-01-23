@@ -1748,12 +1748,15 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
                                SimState->Camera.Up);
 
 
+    // NOTE(Jovan): Default value for texture scaling
+    glUseProgram(Render->Shaders[LIGHTING_SH]);
+    SetUniformF1(Render->Shaders[LIGHTING_SH], "TexScale", 1.0f);
 
     // NOTE(Jovan): Point lights drawing
     // --------------------------
-    glUseProgram(Render->Shaders[CUBESH]);
-    SetUniformM4(Render->Shaders[CUBESH], "View", Render->View);
-    SetUniformM4(Render->Shaders[CUBESH], "Projection", Render->Projection);
+    glUseProgram(Render->Shaders[SIMPLE_COLOR_SH]);
+    SetUniformM4(Render->Shaders[SIMPLE_COLOR_SH], "View", Render->View);
+    SetUniformM4(Render->Shaders[SIMPLE_COLOR_SH], "Projection", Render->Projection);
 
     // TODO(Jovan): Junk code for testing orbits REMOVE
     static real32 angle = 0.5f;
@@ -1762,7 +1765,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
         LightIndex < POINT_LIGHT_COUNT;
         ++LightIndex)
     {
-        SetUniformV3(Render->Shaders[CUBESH], "ObjectColor", SimState->Lights[LightIndex].Specular);
+        SetUniformV3(Render->Shaders[SIMPLE_COLOR_SH], "ObjectColor", SimState->Lights[LightIndex].Specular);
 
         // TODO(Jovan): Optimize, maybe call just once
         char Position[64];
@@ -1772,7 +1775,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
         char Diffuse[64];
         char Ambient[64];
         char Specular[64];
-        glUseProgram(Render->Shaders[LIGHTSH]);
+        glUseProgram(Render->Shaders[LIGHTING_SH]);
         sprintf(Position, "PointLights[%d].Position", LightIndex);
         sprintf(Constant, "PointLights[%d].Constant", LightIndex);
         sprintf(Linear, "PointLights[%d].Linear", LightIndex);
@@ -1780,14 +1783,14 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
         sprintf(Diffuse, "PointLights[%d].Diffuse", LightIndex);
         sprintf(Ambient, "PointLights[%d].Ambient", LightIndex);
         sprintf(Specular, "PointLights[%d].Specular", LightIndex);
-        SetUniformV3(Render->Shaders[LIGHTSH], Position, SimState->Lights[LightIndex].Position);
-        SetUniformF1(Render->Shaders[LIGHTSH], Constant, SimState->Lights[LightIndex].Kc);
-        SetUniformF1(Render->Shaders[LIGHTSH], Linear, SimState->Lights[LightIndex].Kl);
-        SetUniformF1(Render->Shaders[LIGHTSH], Quadratic, SimState->Lights[LightIndex].Kq);
-        SetUniformV3(Render->Shaders[LIGHTSH], Diffuse, SimState->Lights[LightIndex].Diffuse);
-        SetUniformV3(Render->Shaders[LIGHTSH], Ambient, SimState->Lights[LightIndex].Ambient);
-        SetUniformV3(Render->Shaders[LIGHTSH], Specular, SimState->Lights[LightIndex].Specular);
-        glUseProgram(Render->Shaders[CUBESH]);
+        SetUniformV3(Render->Shaders[LIGHTING_SH], Position, SimState->Lights[LightIndex].Position);
+        SetUniformF1(Render->Shaders[LIGHTING_SH], Constant, SimState->Lights[LightIndex].Kc);
+        SetUniformF1(Render->Shaders[LIGHTING_SH], Linear, SimState->Lights[LightIndex].Kl);
+        SetUniformF1(Render->Shaders[LIGHTING_SH], Quadratic, SimState->Lights[LightIndex].Kq);
+        SetUniformV3(Render->Shaders[LIGHTING_SH], Diffuse, SimState->Lights[LightIndex].Diffuse);
+        SetUniformV3(Render->Shaders[LIGHTING_SH], Ambient, SimState->Lights[LightIndex].Ambient);
+        SetUniformV3(Render->Shaders[LIGHTING_SH], Specular, SimState->Lights[LightIndex].Specular);
+        glUseProgram(Render->Shaders[SIMPLE_COLOR_SH]);
 
 
         Model = glm::mat4(1.0f);
@@ -1801,7 +1804,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
         Model = glm::translate(Model, SimState->Lights[LightIndex].Position);
         Model = glm::scale(Model, SimState->Lights[LightIndex].Size * glm::vec3(1.0f));
 
-        SetUniformM4(Render->Shaders[CUBESH], "Model", Model);
+        SetUniformM4(Render->Shaders[SIMPLE_COLOR_SH], "Model", Model);
         glBindVertexArray(Render->VAOs[LIGHTVAO]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
@@ -1823,18 +1826,19 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     // NOTE(Jovan): Floor drawing
     // --------------------------
 
-    glUseProgram(Render->Shaders[LIGHTSH]);
+    glUseProgram(Render->Shaders[LIGHTING_SH]);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, Render->Textures[METAL_ALBEDO]);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, Render->Textures[METAL_SPECULAR]);
-    SetUniformI1(Render->Shaders[LIGHTSH], "Material.Diffuse", 0);
-    SetUniformI1(Render->Shaders[LIGHTSH], "Material.Specular", 1);
-    SetUniformF1(Render->Shaders[LIGHTSH], "Material.Shininess", 64.0f);
-    SetUniformF3(Render->Shaders[LIGHTSH], "Material.Specular", 0.5f, 0.5f, 0.5f);
-    SetUniformM4(Render->Shaders[LIGHTSH], "View", Render->View);
-    SetUniformM4(Render->Shaders[LIGHTSH], "Projection", Render->Projection);
-    SetUniformF3(Render->Shaders[LIGHTSH], "ViewPos", SimState->Camera.Position.x, SimState->Camera.Position.y, SimState->Camera.Position.z);
+    SetUniformF1(Render->Shaders[LIGHTING_SH], "TexScale", 16.0f);
+    SetUniformI1(Render->Shaders[LIGHTING_SH], "Material.Diffuse", 0);
+    SetUniformI1(Render->Shaders[LIGHTING_SH], "Material.Specular", 1);
+    SetUniformF1(Render->Shaders[LIGHTING_SH], "Material.Shininess", 64.0f);
+    SetUniformF3(Render->Shaders[LIGHTING_SH], "Material.Specular", 0.5f, 0.5f, 0.5f);
+    SetUniformM4(Render->Shaders[LIGHTING_SH], "View", Render->View);
+    SetUniformM4(Render->Shaders[LIGHTING_SH], "Projection", Render->Projection);
+    SetUniformF3(Render->Shaders[LIGHTING_SH], "ViewPos", SimState->Camera.Position.x, SimState->Camera.Position.y, SimState->Camera.Position.z);
     SimState->Floor.Model = glm::mat4(1.0);
     SimState->Floor.Model = glm::translate(SimState->Floor.Model, SimState->Floor.Position);
     SimState->Floor.Model = glm::rotate(SimState->Floor.Model, glm::radians(SimState->Floor.Angles.x),
@@ -1845,10 +1849,14 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
                                         glm::vec3(0.0f, 0.0f, 1.0f));
     SimState->Floor.Model = glm::scale(SimState->Floor.Model,
                                        glm::vec3(SimState->Floor.Size, 1.0, SimState->Floor.Size));
-    SetUniformM4(Render->Shaders[LIGHTSH], "Model", SimState->Floor.Model);
+    SetUniformM4(Render->Shaders[LIGHTING_SH], "Model", SimState->Floor.Model);
     FloorUpdateVertices(SimState);
     glBindVertexArray(Render->VAOs[CUBEVAO]);
     glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // NOTE(Jovan): Back to default scaling after drawing
+    SetUniformF1(Render->Shaders[LIGHTING_SH], "TexScale", 1.0f);
+
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -1862,13 +1870,13 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     glBindTexture(GL_TEXTURE_2D, Render->Textures[CONTAINER_DIFFUSE]);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, Render->Textures[CONTAINER_SPECULAR]);
-    SetUniformI1(Render->Shaders[LIGHTSH], "Material.Diffuse", 0);
-    SetUniformI1(Render->Shaders[LIGHTSH], "Material.Specular", 1);
-    SetUniformF1(Render->Shaders[LIGHTSH], "Material.Shininess", 64.0f);
-    SetUniformF3(Render->Shaders[LIGHTSH], "Material.Specular", 0.5f, 0.5f, 0.5f);
-    SetUniformM4(Render->Shaders[LIGHTSH], "View", Render->View);
-    SetUniformM4(Render->Shaders[LIGHTSH], "Projection", Render->Projection);
-    SetUniformF3(Render->Shaders[LIGHTSH], "ViewPos", SimState->Camera.Position.x, SimState->Camera.Position.y, SimState->Camera.Position.z);
+    SetUniformI1(Render->Shaders[LIGHTING_SH], "Material.Diffuse", 0);
+    SetUniformI1(Render->Shaders[LIGHTING_SH], "Material.Specular", 1);
+    SetUniformF1(Render->Shaders[LIGHTING_SH], "Material.Shininess", 64.0f);
+    SetUniformF3(Render->Shaders[LIGHTING_SH], "Material.Specular", 0.5f, 0.5f, 0.5f);
+    SetUniformM4(Render->Shaders[LIGHTING_SH], "View", Render->View);
+    SetUniformM4(Render->Shaders[LIGHTING_SH], "Projection", Render->Projection);
+    SetUniformF3(Render->Shaders[LIGHTING_SH], "ViewPos", SimState->Camera.Position.x, SimState->Camera.Position.y, SimState->Camera.Position.z);
 #if DRAW_CUBES
     for (uint32 CubeIndex = 0;
          CubeIndex < SimState->CubeCount;
@@ -1886,7 +1894,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
                                             SimState->Cubes[CubeIndex].Size,
                                             SimState->Cubes[CubeIndex].Size));
         SimState->Cubes[CubeIndex].Model = Model;
-        SetUniformM4(Render->Shaders[LIGHTSH], "Model", Model);
+        SetUniformM4(Render->Shaders[LIGHTING_SH], "Model", Model);
         glBindVertexArray(Render->VAOs[CUBEVAO]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
@@ -1898,20 +1906,20 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     // NOTE(Jovan): Sphere drawing
     // ---------------------------
 #if DRAW_SPHERES
-    glUseProgram(Render->Shaders[CUBESH]);
-    SetUniformM4(Render->Shaders[CUBESH], "View", Render->View);
-    SetUniformM4(Render->Shaders[CUBESH], "Projection", Render->Projection);
-    SetUniformV3(Render->Shaders[CUBESH], "ViewPos", SimState->Camera.Position);
-    SetUniformF3(Render->Shaders[CUBESH], "ObjectColor", 1.0f, 0.64f, 0.0f);
+    glUseProgram(Render->Shaders[SIMPLE_COLOR_SH]);
+    SetUniformM4(Render->Shaders[SIMPLE_COLOR_SH], "View", Render->View);
+    SetUniformM4(Render->Shaders[SIMPLE_COLOR_SH], "Projection", Render->Projection);
+    SetUniformV3(Render->Shaders[SIMPLE_COLOR_SH], "ViewPos", SimState->Camera.Position);
+    SetUniformF3(Render->Shaders[SIMPLE_COLOR_SH], "ObjectColor", 1.0f, 0.64f, 0.0f);
 
-    glUseProgram(Render->Shaders[LIGHTSH]);
-    SetUniformF1(Render->Shaders[LIGHTSH], "PointLights[4].Constant", SimState->Lights[0].Kc);
-    SetUniformF1(Render->Shaders[LIGHTSH], "PointLights[4].Linear", SimState->Lights[0].Kl);
-    SetUniformF1(Render->Shaders[LIGHTSH], "PointLights[4].Quadratic", SimState->Lights[0].Kq);
-    SetUniformF3(Render->Shaders[LIGHTSH], "PointLights[4].Diffuse", 0.5f, 0.14f, 0.0f);
-    SetUniformF3(Render->Shaders[LIGHTSH], "PointLights[4].Ambient", 0.7f, 0.34f, 0.0f);
-    SetUniformF3(Render->Shaders[LIGHTSH], "PointLights[4].Specular", 1.0f, 0.64f, 0.0f);
-    glUseProgram(Render->Shaders[CUBESH]);
+    glUseProgram(Render->Shaders[LIGHTING_SH]);
+    SetUniformF1(Render->Shaders[LIGHTING_SH], "PointLights[4].Constant", SimState->Lights[0].Kc);
+    SetUniformF1(Render->Shaders[LIGHTING_SH], "PointLights[4].Linear", SimState->Lights[0].Kl);
+    SetUniformF1(Render->Shaders[LIGHTING_SH], "PointLights[4].Quadratic", SimState->Lights[0].Kq);
+    SetUniformF3(Render->Shaders[LIGHTING_SH], "PointLights[4].Diffuse", 0.5f, 0.14f, 0.0f);
+    SetUniformF3(Render->Shaders[LIGHTING_SH], "PointLights[4].Ambient", 0.7f, 0.34f, 0.0f);
+    SetUniformF3(Render->Shaders[LIGHTING_SH], "PointLights[4].Specular", 1.0f, 0.64f, 0.0f);
+    glUseProgram(Render->Shaders[SIMPLE_COLOR_SH]);
 
     for (uint32 SphereIndex = 0;
          SphereIndex < SimState->SphereCount;
@@ -1929,13 +1937,13 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
                                             SimState->Spheres[SphereIndex].Radius,
                                             SimState->Spheres[SphereIndex].Radius));
 
-        glUseProgram(Render->Shaders[LIGHTSH]);
-        SetUniformV3(Render->Shaders[LIGHTSH], "PointLights[4].Position", SimState->Spheres[SphereIndex].Position);
-        glUseProgram(Render->Shaders[CUBESH]);
+        glUseProgram(Render->Shaders[LIGHTING_SH]);
+        SetUniformV3(Render->Shaders[LIGHTING_SH], "PointLights[4].Position", SimState->Spheres[SphereIndex].Position);
+        glUseProgram(Render->Shaders[SIMPLE_COLOR_SH]);
 
 
         SimState->Spheres[SphereIndex].Model = Model;
-        SetUniformM4(Render->Shaders[CUBESH], "Model", Model);
+        SetUniformM4(Render->Shaders[SIMPLE_COLOR_SH], "Model", Model);
         glBindVertexArray(Render->VAOs[SPHEREVAO]);
         glDrawElements(GL_TRIANGLES, Render->Num, GL_UNSIGNED_INT, Render->Indices);
     }
@@ -1946,23 +1954,23 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
 
     // NOTE(Jovan): Model drawing
     // --------------------------
-    glUseProgram(Render->Shaders[LIGHTSH]);
+    glUseProgram(Render->Shaders[LIGHTING_SH]);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, Render->Textures[AMONG_US_DIFFUSE]);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, Render->Textures[AMONG_US_SPECULAR]);
-    SetUniformI1(Render->Shaders[LIGHTSH], "Material.Diffuse", 0);
-    SetUniformI1(Render->Shaders[LIGHTSH], "Material.Specular", 1);
-    SetUniformF1(Render->Shaders[LIGHTSH], "Material.Shininess", 64.0f);
-    SetUniformF3(Render->Shaders[LIGHTSH], "Material.Specular", 0.5f, 0.5f, 0.5f);
-    SetUniformM4(Render->Shaders[LIGHTSH], "View", Render->View);
-    SetUniformM4(Render->Shaders[LIGHTSH], "Projection", Render->Projection);
-    SetUniformV3(Render->Shaders[LIGHTSH], "ViewPos", SimState->Camera.Position);
+    SetUniformI1(Render->Shaders[LIGHTING_SH], "Material.Diffuse", 0);
+    SetUniformI1(Render->Shaders[LIGHTING_SH], "Material.Specular", 1);
+    SetUniformF1(Render->Shaders[LIGHTING_SH], "Material.Shininess", 64.0f);
+    SetUniformF3(Render->Shaders[LIGHTING_SH], "Material.Specular", 0.5f, 0.5f, 0.5f);
+    SetUniformM4(Render->Shaders[LIGHTING_SH], "View", Render->View);
+    SetUniformM4(Render->Shaders[LIGHTING_SH], "Projection", Render->Projection);
+    SetUniformV3(Render->Shaders[LIGHTING_SH], "ViewPos", SimState->Camera.Position);
 
     Model = glm::mat4(1.0);
     Model = glm::translate(Model, glm::vec3(0.0f));
     Model = glm::scale(Model, glm::vec3(0.005f));
-    SetUniformM4(Render->Shaders[LIGHTSH], "Model", Model);
+    SetUniformM4(Render->Shaders[LIGHTING_SH], "Model", Model);
     glBindVertexArray(Render->VAOs[MODELVAO]);
     glDrawElements(GL_TRIANGLES, Render->ModelNum, GL_UNSIGNED_INT, Render->ModelIndices);
     glBindVertexArray(0);

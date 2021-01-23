@@ -47,8 +47,8 @@ typedef double real64;
 
 #define SHOOT_FORCE 4001.0f
 
-#define DEFAULT_WINDOW_WIDTH 1024
-#define DEFAULT_WINDOW_HEIGHT 768
+#define DEFAULT_WINDOW_WIDTH 1920
+#define DEFAULT_WINDOW_HEIGHT 1080
 #define MAX_CUBE_COUNT 16
 #define MAX_SPHERE_COUNT 16
 #define MAX_GJK_ITERATIONS 64
@@ -201,9 +201,9 @@ enum sdl_vbo
 
 enum sdl_shader
 {
-    CUBESH,
-    TEXTSH,
-    LIGHTSH,
+    SIMPLE_COLOR_SH,
+    TEXT_SH,
+    LIGHTING_SH,
     SHADER_COUNT
 };
 
