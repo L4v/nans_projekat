@@ -143,29 +143,30 @@ HandleInput(sdl_state *State, sdl_input *Input, real32 dt)
     {
         ShootSphere(State); //CubeAddForce(State, 0, 20.0f * State->Camera.Front);
     }
+    // TODO(Jovan): Remove Cubes[3], only for debugging model
     if (Input->KeyboardController.DebugLeft.EndedDown)
     {
-        State->Cubes[0].Position += dt * glm::vec3(1.0, 0.0, 0.0);
+        State->Cubes[3].Position += dt * glm::vec3(1.0, 0.0, 0.0);
     }
     if (Input->KeyboardController.DebugRight.EndedDown)
     {
-        State->Cubes[0].Position += dt * glm::vec3(-1.0, 0.0, 0.0);
+        State->Cubes[3].Position += dt * glm::vec3(-1.0, 0.0, 0.0);
     }
     if (Input->KeyboardController.DebugUp.EndedDown)
     {
-        State->Cubes[0].Position += dt * glm::vec3(0.0, 1.0, 0.0);
+        State->Cubes[3].Position += dt * glm::vec3(0.0, 1.0, 0.0);
     }
     if (Input->KeyboardController.DebugDown.EndedDown)
     {
-        State->Cubes[0].Position += dt * glm::vec3(0.0, -1.0, 0.0);
+        State->Cubes[3].Position += dt * glm::vec3(0.0, -1.0, 0.0);
     }
     if (Input->KeyboardController.DebugForward.EndedDown)
     {
-        State->Cubes[0].Position += dt * glm::vec3(0.0, 0.0, 1.0);
+        State->Cubes[3].Position += dt * glm::vec3(0.0, 0.0, 1.0);
     }
     if (Input->KeyboardController.DebugBack.EndedDown)
     {
-        State->Cubes[0].Position += dt * glm::vec3(0.0, 0.0, -1.0);
+        State->Cubes[3].Position += dt * glm::vec3(0.0, 0.0, -1.0);
     }
     // TODO(Jovan): For debugging
     if (Input->KeyboardController.DebugReset.EndedDown)
@@ -181,6 +182,10 @@ HandleInput(sdl_state *State, sdl_input *Input, real32 dt)
         State->Cubes[2].Position = glm::vec3(2.0, 4.5, 2.0);
         State->Cubes[2].V = glm::vec3(0.0f);
         State->Cubes[2].W = glm::vec3(0.0f);
+`
+        State->Cubes[3].Position = glm::vec3(0.0f);
+        State->Cubes[3].V = glm::vec3(0.0f);
+        State->Cubes[3].W = glm::vec3(0.0f);
     }
 }
 
@@ -1596,7 +1601,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
         SimState->Camera.Up = glm::cross(SimState->Camera.Direction, SimState->Camera.Right);
 
         // NOTE(Jovan): Cube init
-        SimState->CubeCount = 3;
+        SimState->CubeCount = 4;
         SimState->Cubes[0].Model = glm::mat4(1.0);
         UpdateVertices(SimState, 0);
         SimState->Cubes[0].Position = glm::vec3(2.0f, 3.5f, 2.0f); //glm::vec3(2.0, 4.5f, 2.1);
@@ -1635,6 +1640,20 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
         SimState->Cubes[2].Mass = 1.0f;
         SimState->Cubes[2].MOI = (SimState->Cubes[2].Mass / 12.0f) *
                                  (2.0f * SimState->Cubes[2].Size * SimState->Cubes[2].Size);
+
+        // TODO(Jovan): Temporary, for testing model collision boxes
+        SimState->Cubes[3].Model = glm::mat4(1.0f);
+        UpdateVertices(SimState, 3);
+        SimState->Cubes[3].Position = glm::vec3(1.0f);
+        SimState->Cubes[3].V = glm::vec3(0.0);
+        SimState->Cubes[3].Forces = glm::vec3(0.0);
+        SimState->Cubes[3].Angles = glm::vec3(0.0);
+        SimState->Cubes[3].W = glm::vec3(0.0);
+        SimState->Cubes[3].Torque = glm::vec3(0.0);
+        SimState->Cubes[3].Size = 1.0f;
+        SimState->Cubes[3].Mass = 1.0f;
+        SimState->Cubes[3].MOI = (SimState->Cubes[3].Mass / 12.0f) *
+            (2.0f * SimState->Cubes[3].Size * SimState->Cubes[3].Size);
 
         // NOTE(Jovan): Sphere init
         SimState->SphereCount = 1;
@@ -1879,7 +1898,7 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     SetUniformF3(Render->Shaders[LIGHTING_SH], "ViewPos", SimState->Camera.Position.x, SimState->Camera.Position.y, SimState->Camera.Position.z);
 #if DRAW_CUBES
     for (uint32 CubeIndex = 0;
-         CubeIndex < SimState->CubeCount;
+         CubeIndex < SimState->CubeCount - 1; // TODO(Jovan): Ignore the model collision box
          ++CubeIndex)
     {
         Model = glm::mat4(1.0f);
@@ -1898,6 +1917,25 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
         glBindVertexArray(Render->VAOs[CUBEVAO]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
+    // TODO(Jovan): Collision box
+    Model = glm::mat4(1.0f);
+    Model = glm::translate(Model, SimState->Cubes[3].Position);
+    Model = glm::rotate(Model, glm::radians(SimState->Cubes[3].Angles.x),
+                        glm::vec3(1.0f, 0.0f, 0.0f));
+    Model = glm::rotate(Model, glm::radians(SimState->Cubes[3].Angles.y),
+                        glm::vec3(0.0f, 1.0f, 0.0f));
+    Model = glm::rotate(Model, glm::radians(SimState->Cubes[3].Angles.z),
+                        glm::vec3(0.0f, 0.0f, 1.0f));
+    Model = glm::scale(Model, glm::vec3(SimState->Cubes[3].Size * 0.5f,
+                                        SimState->Cubes[3].Size * 1.0f,
+                                        SimState->Cubes[3].Size * 0.5f));
+    SimState->Cubes[3].Model = Model;
+    SetUniformM4(Render->Shaders[LIGHTING_SH], "Model", Model);
+    glBindVertexArray(Render->VAOs[CUBEVAO]);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
     // NOTE(Jovan): End cube drawing
@@ -1966,8 +2004,9 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     SetUniformM4(Render->Shaders[LIGHTING_SH], "Projection", Render->Projection);
     SetUniformV3(Render->Shaders[LIGHTING_SH], "ViewPos", SimState->Camera.Position);
 
+
     Model = glm::mat4(1.0);
-    Model = glm::translate(Model, glm::vec3(0.0f));
+    Model = glm::translate(Model, glm::vec3(SimState->Cubes[3].Position.x, SimState->Cubes[3].Position.y - 0.5f, SimState->Cubes[3].Position.z));
     Model = glm::scale(Model, glm::vec3(0.005f));
     SetUniformM4(Render->Shaders[LIGHTING_SH], "Model", Model);
     glBindVertexArray(Render->VAOs[MODELVAO]);
