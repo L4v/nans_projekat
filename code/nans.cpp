@@ -1941,7 +1941,6 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
         SetUniformV3(Render->Shaders[LIGHTING_SH], "PointLights[4].Position", SimState->Spheres[SphereIndex].Position);
         glUseProgram(Render->Shaders[SIMPLE_COLOR_SH]);
 
-
         SimState->Spheres[SphereIndex].Model = Model;
         SetUniformM4(Render->Shaders[SIMPLE_COLOR_SH], "Model", Model);
         glBindVertexArray(Render->VAOs[SPHEREVAO]);

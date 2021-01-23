@@ -432,9 +432,68 @@ SDLUnloadSimCode(sdl_sim_code *SimCode)
 
 // TODO(Jovan): Optimize and use EBO?
 static void
-LoadModel(const char *ModelFilepath, uint32 &ModelVAO, uint32 &ModelVBO)
+LoadModel(sdl_render* render, const char* modelFilepath)
 {
-    // TODO(Jovan): Implement
+    const struct aiScene *Scene = aiImportFile(modelFilepath, aiProcess_Triangulate | aiProcess_FlipUVs);
+    if (!Scene || Scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !Scene->mRootNode)
+    {
+        printf("ERROR::ASSIMP MODEL LOADING FAILED\n%s", aiGetErrorString());
+    }
+    printf("Loaded model with %d meshes\n", Scene->mNumMeshes);
+    const struct aiMesh *Mesh = Scene->mMeshes[0];
+    int32 NumMeshVertices = Mesh->mNumVertices;
+    printf("Mesh with %d vertices\n", NumMeshVertices);
+    real32 MeshVertices[8 * NumMeshVertices];
+    uint32 VertexCount = 0;
+    for (int VertexIndex = 0;
+         VertexIndex < NumMeshVertices;
+         ++VertexIndex)
+    {
+        MeshVertices[VertexCount++] = Mesh->mVertices[VertexIndex].x;
+        MeshVertices[VertexCount++] = Mesh->mVertices[VertexIndex].y;
+        MeshVertices[VertexCount++] = Mesh->mVertices[VertexIndex].z;
+        MeshVertices[VertexCount++] = Mesh->mTextureCoords[0][VertexIndex].x;
+        MeshVertices[VertexCount++] = Mesh->mTextureCoords[0][VertexIndex].y;
+        MeshVertices[VertexCount++] = Mesh->mNormals[VertexIndex].x;
+        MeshVertices[VertexCount++] = Mesh->mNormals[VertexIndex].y;
+        MeshVertices[VertexCount++] = Mesh->mNormals[VertexIndex].z;
+    }
+    printf("Mesh with %d faces\n", Mesh->mNumFaces);
+    int32 NumMeshFaces = Mesh->mNumFaces;
+
+    // NOTE(Jovan): x3 because faces are triangles due to aiProcess_Triangulate flag
+    uint32 MeshFaceIndices[NumMeshFaces * 3];
+    uint32 IndexCount = 0;
+    for (uint32 FaceIndex = 0;
+         FaceIndex < Mesh->mNumFaces;
+         ++FaceIndex)
+    {
+        MeshFaceIndices[IndexCount++] = Mesh->mFaces[FaceIndex].mIndices[0];
+        MeshFaceIndices[IndexCount++] = Mesh->mFaces[FaceIndex].mIndices[1];
+        MeshFaceIndices[IndexCount++] = Mesh->mFaces[FaceIndex].mIndices[2];
+    }
+
+    glBindVertexArray(render->VAOs[MODELVAO]);
+
+    glBindBuffer(GL_ARRAY_BUFFER, render->VBOs[MODELVBO]);
+    glBufferData(GL_ARRAY_BUFFER, 8 * NumMeshVertices * sizeof(real32), MeshVertices, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
+        (void *)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
+        (void *)(3 * sizeof(real32)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
+        (void *)(5 * sizeof(real32)));
+    glEnableVertexAttribArray(2);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    aiReleaseImport(Scene);
+    //---
+
+    render->ModelIndices = MeshFaceIndices;
+    render->ModelNum = ArrayCount(MeshFaceIndices);
 }
 
 // TODO(jovan): Refactor!!!
@@ -834,6 +893,8 @@ int main()
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
+    LoadModel(&Render, "../res/model/amongus.obj");
 
     // NOTE(Jovan): Main loop
     bool32 Running = 1;
@@ -854,71 +915,6 @@ int main()
     Render.Indices = SphereIndices;
     Render.Num = ArrayCount(SphereIndices);
 
-    // NOTE(Jovan): Assimp model loading
-    // TODO(Jovan): Move to proper location / compact to function
-    // -------------------------------------
-    const char *ModelFilepath = "../res/model/amongus.obj";
-    const struct aiScene *Scene = aiImportFile(ModelFilepath, aiProcess_Triangulate | aiProcess_FlipUVs);
-    if (!Scene || Scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !Scene->mRootNode)
-    {
-        printf("ERROR::ASSIMP MODEL LOADING FAILED\n%s", aiGetErrorString());
-    }
-    printf("Loaded model with %d meshes\n", Scene->mNumMeshes);
-    const struct aiMesh *Mesh = Scene->mMeshes[0];
-    int32 NumMeshVertices = Mesh->mNumVertices;
-    printf("Mesh with %d vertices\n", NumMeshVertices);
-    real32 MeshVertices[8 * NumMeshVertices];
-    uint32 VertexCount = 0;
-    for (int VertexIndex = 0;
-         VertexIndex < NumMeshVertices;
-         ++VertexIndex)
-    {
-        MeshVertices[VertexCount++] = Mesh->mVertices[VertexIndex].x;
-        MeshVertices[VertexCount++] = Mesh->mVertices[VertexIndex].y;
-        MeshVertices[VertexCount++] = Mesh->mVertices[VertexIndex].z;
-        MeshVertices[VertexCount++] = Mesh->mTextureCoords[0][VertexIndex].x;
-        MeshVertices[VertexCount++] = Mesh->mTextureCoords[0][VertexIndex].y;
-        MeshVertices[VertexCount++] = Mesh->mNormals[VertexIndex].x;
-        MeshVertices[VertexCount++] = Mesh->mNormals[VertexIndex].y;
-        MeshVertices[VertexCount++] = Mesh->mNormals[VertexIndex].z;
-    }
-    printf("Mesh with %d faces\n", Mesh->mNumFaces);
-    int32 NumMeshFaces = Mesh->mNumFaces;
-
-    // NOTE(Jovan): x3 because faces are triangles due to aiProcess_Triangulate flag
-    uint32 MeshFaceIndices[NumMeshFaces * 3];
-    uint32 IndexCount = 0;
-    for (uint32 FaceIndex = 0;
-         FaceIndex < Mesh->mNumFaces;
-         ++FaceIndex)
-    {
-        MeshFaceIndices[IndexCount++] = Mesh->mFaces[FaceIndex].mIndices[0];
-        MeshFaceIndices[IndexCount++] = Mesh->mFaces[FaceIndex].mIndices[1];
-        MeshFaceIndices[IndexCount++] = Mesh->mFaces[FaceIndex].mIndices[2];
-    }
-
-    glBindVertexArray(Render.VAOs[MODELVAO]);
-
-    glBindBuffer(GL_ARRAY_BUFFER, Render.VBOs[MODELVBO]);
-    glBufferData(GL_ARRAY_BUFFER, 8 * NumMeshVertices * sizeof(real32), MeshVertices, GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
-        (void *)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
-        (void *)(3 * sizeof(real32)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(real32),
-        (void *)(5 * sizeof(real32)));
-    glEnableVertexAttribArray(2);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    aiReleaseImport(Scene);
-    //---
-
-    Render.ModelIndices = MeshFaceIndices;
-    Render.ModelNum = ArrayCount(MeshFaceIndices);
-    // NOTE(Jovan): End assimp model loading
 
     while (Running)
     {
