@@ -1,8 +1,0 @@
-#ifndef NANS_H
-
-internal void
-Test();
-{}
-
-#define NANS_H
-#endif
