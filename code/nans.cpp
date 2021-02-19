@@ -1547,15 +1547,9 @@ SolveConstraints(sdl_state *State, real32 dt, std::vector<contact_pair> &Pairs)
     }
 }
 
-extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
-{
-    sdl_state *SimState = (sdl_state *)Memory->PermanentStorage;
-
-    // NOTE(Jovan): Init
-    // -----------------
-    if (!Memory->IsInitialized)
-    {
-        // NOTE(Jovan): Init random seed
+static void
+Init(sdl_state* SimState)
+{    // NOTE(Jovan): Init random seed
         srand(time(0));
 
         // NOTE(Jovan): GJK init stuff
@@ -1720,7 +1714,17 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
         SimState->Lights[3].Diffuse = glm::vec3(0.5f, 0.5f, 0.0f);
         SimState->Lights[3].Specular = glm::vec3(1.0f, 1.0f, 0.0f);
         
+}
 
+extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
+{
+    sdl_state *SimState = (sdl_state *)Memory->PermanentStorage;
+
+    // NOTE(Jovan): Init
+    // -----------------
+    if (!Memory->IsInitialized)
+    {
+        Init(SimState);
         Memory->IsInitialized = 1;
     }
     // NOTE(Jovan): End init
@@ -1729,14 +1733,15 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     // NOTE(Jovan): Coordinate systems
     // -------------------------------
     Render->Projection = glm::perspective(glm::radians(45.0f),
-                                          (real32)DEFAULT_WINDOW_WIDTH / (real32)DEFAULT_WINDOW_HEIGHT,
-                                          0.1f,
-                                          100.0f);
+        (real32)DEFAULT_WINDOW_WIDTH / (real32)DEFAULT_WINDOW_HEIGHT,
+        0.1f,
+        100.0f);
     glm::mat4 Model = glm::mat4(1.0f);
     Render->View = glm::mat4(1.0f);
     Render->View = glm::translate(Render->View, glm::vec3(0.0f, 0.0f, -3.0f));
-    Render->View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
-                               SimState->Camera.Up);
+    Render->View = glm::lookAt(SimState->Camera.Position,
+        SimState->Camera.Position + SimState->Camera.Front,
+        SimState->Camera.Up);
 
     // NOTE(Jovan): End coordinate systems
     // ------------------------------------
@@ -1758,6 +1763,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     // NOTE(Jovan): End physics stuff
     // ------------------------------
 
+    // NOTE(Jovan): Update camera
+    // --------------------------
     glm::vec3 Front;
     Front.x = cos(glm::radians(SimState->Camera.Yaw)) * cos(glm::radians(SimState->Camera.Pitch));
     Front.y = sin(glm::radians(SimState->Camera.Pitch));
@@ -1765,14 +1772,15 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     SimState->Camera.Front = glm::normalize(Front);
     Render->View = glm::lookAt(SimState->Camera.Position, SimState->Camera.Position + SimState->Camera.Front,
                                SimState->Camera.Up);
-
+    // NOTE(Jovan): End update camera
+    // ------------------------------
 
     // NOTE(Jovan): Default value for texture scaling
     glUseProgram(Render->Shaders[LIGHTING_SH]);
     SetUniformF1(Render->Shaders[LIGHTING_SH], "TexScale", 1.0f);
 
     // NOTE(Jovan): Point lights drawing
-    // --------------------------
+    // ---------------------------------
     glUseProgram(Render->Shaders[SIMPLE_COLOR_SH]);
     SetUniformM4(Render->Shaders[SIMPLE_COLOR_SH], "View", Render->View);
     SetUniformM4(Render->Shaders[SIMPLE_COLOR_SH], "Projection", Render->Projection);
@@ -1831,7 +1839,8 @@ extern "C" SIM_UPDATE_AND_RENDER(SimUpdateAndRender)
     glUseProgram(0);
     glBindVertexArray(0);
     glBindTexture(GL_TEXTURE_2D, 0);
-    // NOTE(Jovan): End of light drawing)
+    // NOTE(Jovan): End of light drawing
+    // ---------------------------------
 
 #if DRAW_WIRE
     glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
