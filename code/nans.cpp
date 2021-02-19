@@ -182,7 +182,7 @@ HandleInput(sdl_state *State, sdl_input *Input, real32 dt)
         State->Cubes[2].Position = glm::vec3(2.0, 4.5, 2.0);
         State->Cubes[2].V = glm::vec3(0.0f);
         State->Cubes[2].W = glm::vec3(0.0f);
-`
+
         State->Cubes[3].Position = glm::vec3(0.0f);
         State->Cubes[3].V = glm::vec3(0.0f);
         State->Cubes[3].W = glm::vec3(0.0f);
